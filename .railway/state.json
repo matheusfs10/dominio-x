@@ -1,0 +1,32 @@
+{
+  "region": "us-east4-eqdc4a",
+  "bucketRegion": "iad",
+  "core": {
+    "projectId": "5d7e62d9-b7b6-41b5-bed3-b4de7e7ae012",
+    "environmentId": "8080986d-c7d7-4e9e-ba0f-86f100aa2e95",
+    "workspaceId": "ba94cd2e-2a91-46f4-a339-62e8ffef3a82",
+    "services": {
+      "web": "95d790d4-d425-4f05-ab3e-c7ba302e2364",
+      "api": "d780807f-c760-45d6-ae6a-1d00ef927e30",
+      "worker": "1726675f-3494-424a-89e8-1e689174d3a8",
+      "scheduler-registro-br": null,
+      "Postgres": "a42dd9da-8b7a-4796-994a-a5cc1906da44",
+      "Redis": "5804e4de-a267-4f81-9d85-5b22d6c92ba4"
+    },
+    "bucket": {
+      "id": "5665b178-138b-4392-8891-077e69ec5fe7",
+      "name": "dominio-x-data"
+    },
+    "domains": {
+      "web": "https://web-production-46901.up.railway.app",
+      "api": "https://api-production-fec75.up.railway.app"
+    }
+  },
+  "crawlers": {
+    "projectId": "c43a5643-cf1d-46e7-aee1-00bfcf32e68d",
+    "environmentId": "852cadbe-0674-4677-b788-876bdafc4f56",
+    "services": {
+      "crawler": null
+    }
+  }
+}

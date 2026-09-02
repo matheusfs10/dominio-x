@@ -55,10 +55,11 @@ Legend: [x] done · [~] partial / blocked · [ ] not started
 - [x] Tags, notes, manual dispositions (additive history), blacklist, force reanalysis / deep analysis
 
 ## M10 — Railway production deployment
-- [x] `railway.json` per service (build/start, watch paths, health checks, cron, pre-deploy migration)
-- [x] Bootstrap/deploy/smoke scripts, GitHub Actions CI
-- [ ] Projects provisioned (`dominio-x-core`, `dominio-x-crawlers`) — **blocked: Railway login required**
-- [ ] Variables, bucket credentials, public domains, deploy, migrations, smoke test, deployment report
+- [x] API-based provisioning script + `.railway/railway.ts` (build/start, health checks, cron, pre-deploy migration)
+- [x] Smoke script, GitHub Actions CI (green)
+- [x] Projects provisioned: `dominio-x-core` (Postgres, Redis, bucket, web/api/worker, domains, variables), `dominio-x-crawlers`
+- [~] Builds blocked: workspace on trial without payment method ("resource provision limit"); `scheduler-registro-br` and `crawler` services still to create
+- [ ] Migrations, smoke test, Registro.br verification (after the first successful build)
 
 ## Quality gates (local, 2026-09-02)
 - [x] `pnpm lint` · `pnpm typecheck` · `pnpm test` (135 tests: unit + integration incl. API, pipeline, SSRF) · `pnpm build`

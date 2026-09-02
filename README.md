@@ -48,5 +48,5 @@ pnpm test:e2e      # Playwright critical flow against a running stack (E2E_BASE_
 apps/        web · api · worker · scheduler (Railway cron) · crawler (isolated Railway project)
 packages/    contracts · config · observability · normalization · storage · database · queue
              providers · source-adapters · rule-engine · scoring · domain-core · test-utils
-scripts/     railway-bootstrap.sh · railway-deploy.sh · smoke-production.sh · seed-admin.ts
+scripts/     railway-provision.mjs (API) · local-stack.mjs · smoke-production.sh · seed-admin.ts
 ```

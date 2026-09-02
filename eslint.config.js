@@ -20,6 +20,7 @@ export default tseslint.config(
       "**/next-env.d.ts",
       "**/.data/**",
       "scripts/**/*.mjs",
+      ".railway/**",
     ],
   },
   js.configs.recommended,

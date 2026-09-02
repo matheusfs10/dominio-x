@@ -17,7 +17,8 @@ status: `CHECKLIST.md`. Architecture: `docs/architecture.md`.
 6. **Crawler isolation.** HTTP fetching only in `apps/crawler` (separate Railway project) through the machine
    API. SSRF policy in `apps/crawler/src/security/` must keep its test matrix green.
 7. **Secrets:** never committed, never logged (pino redaction), never returned by the API.
-8. **Migrations are immutable** and run once per deploy (`preDeployCommand` on `api`), never at boot.
+8. **Migrations are immutable** and run once per deploy (api pre-deploy command), never at boot.
+   Railway settings live in `scripts/railway-provision.mjs` + `.railway/railway.ts` (`railway.json` is deprecated).
 9. **Semrush integration mode is on STANDBY** (`packages/providers/src/semrush/mode.ts`). Do not implement
    scraping. When the operator decides, implement `fetchMetrics()` + `mapping.ts` only.
 
