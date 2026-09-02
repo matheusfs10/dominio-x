@@ -151,7 +151,8 @@ export class RegistroBrReleaseSourceAdapter implements SourceAdapter {
     const metadata: Record<string, unknown> = {};
     return parseLines(content, stats, {
       onComment: (line) => {
-        const period = /per[ií]odo de\s+(\S+)\s+a\s+(\S+)/i.exec(line);
+        // "período" may arrive precomposed or with a combining accent; match loosely.
+        const period = /per.{1,3}odo de\s+(\S+)\s+a\s+(\S+)/i.exec(line);
         if (period) {
           metadata.releasePeriodStart = period[1];
           metadata.releasePeriodEnd = period[2];
