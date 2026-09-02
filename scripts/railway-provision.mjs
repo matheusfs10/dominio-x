@@ -199,15 +199,14 @@ async function existingVariableNames(scope, serviceId) {
 async function deploy(scope, serviceId) {
   const archive = path.join(root, ".railway", "upload.tar.gz");
   execFileSync("git", ["archive", "--format=tar.gz", "-o", archive, "HEAD"], { cwd: root });
-  const form = new FormData();
-  form.append(
-    "file",
-    new Blob([fs.readFileSync(archive)], { type: "application/gzip" }),
-    "archive.tar.gz",
-  );
+  // Like the Railway CLI: the gzip bytes are the raw body, sent with a multipart content-type header.
   const res = await fetch(
     `https://backboard.railway.com/project/${scope.projectId}/environment/${scope.environmentId}/up?serviceId=${serviceId}`,
-    { method: "POST", headers: { authorization: `Bearer ${token}` }, body: form },
+    {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "multipart/form-data" },
+      body: fs.readFileSync(archive),
+    },
   );
   fs.rmSync(archive, { force: true });
   const json = await res.json();
