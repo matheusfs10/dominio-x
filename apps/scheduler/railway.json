@@ -1,0 +1,19 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "pnpm install --frozen-lockfile && pnpm turbo run build --filter=@dominio-x/scheduler",
+    "watchPatterns": [
+      "apps/scheduler/**",
+      "packages/**",
+      "pnpm-lock.yaml",
+      "package.json",
+      "turbo.json"
+    ]
+  },
+  "deploy": {
+    "startCommand": "node apps/scheduler/dist/registro-br.js",
+    "cronSchedule": "0 */6 * * *",
+    "restartPolicyType": "NEVER"
+  }
+}

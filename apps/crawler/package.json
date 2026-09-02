@@ -1,0 +1,26 @@
+{
+  "name": "@dominio-x/crawler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/crawler.ts",
+    "build": "tsup",
+    "start": "node dist/crawler.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@dominio-x/config": "workspace:*",
+    "@dominio-x/contracts": "workspace:*",
+    "@dominio-x/observability": "workspace:*",
+    "ipaddr.js": "^2.5.0",
+    "undici": "^8.10.1",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.13"
+  }
+}

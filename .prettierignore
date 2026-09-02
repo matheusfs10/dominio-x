@@ -1,0 +1,9 @@
+node_modules
+dist
+.next
+.turbo
+pnpm-lock.yaml
+packages/database/migrations
+coverage
+playwright-report
+CHECKLIST.md

@@ -1,0 +1,17 @@
+{
+  "name": "@dominio-x/scoring",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@dominio-x/contracts": "workspace:*",
+    "@dominio-x/rule-engine": "workspace:*",
+    "zod": "^4.5.4"
+  }
+}

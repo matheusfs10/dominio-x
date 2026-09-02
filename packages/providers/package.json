@@ -1,0 +1,21 @@
+{
+  "name": "@dominio-x/providers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@dominio-x/config": "workspace:*",
+    "@dominio-x/contracts": "workspace:*",
+    "ioredis": "^5.11.1",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@dominio-x/test-utils": "workspace:*"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@dominio-x/test-utils",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@dominio-x/database": "workspace:*",
+    "@dominio-x/storage": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "embedded-postgres": "17.10.0-beta.17",
+    "ioredis": "^5.11.1",
+    "postgres": "^3.4.9",
+    "vitest": "^4.1.11"
+  }
+}

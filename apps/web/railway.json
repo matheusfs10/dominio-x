@@ -1,0 +1,21 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "pnpm install --frozen-lockfile && pnpm turbo run build --filter=@dominio-x/web",
+    "watchPatterns": [
+      "apps/web/**",
+      "packages/contracts/**",
+      "pnpm-lock.yaml",
+      "package.json",
+      "turbo.json"
+    ]
+  },
+  "deploy": {
+    "startCommand": "pnpm --filter @dominio-x/web start",
+    "healthcheckPath": "/api/health",
+    "healthcheckTimeout": 120,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}

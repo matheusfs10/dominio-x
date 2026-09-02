@@ -1,0 +1,43 @@
+{
+  "name": "@dominio-x/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsup",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@dominio-x/config": "workspace:*",
+    "@dominio-x/contracts": "workspace:*",
+    "@dominio-x/database": "workspace:*",
+    "@dominio-x/domain-core": "workspace:*",
+    "@dominio-x/normalization": "workspace:*",
+    "@dominio-x/observability": "workspace:*",
+    "@dominio-x/providers": "workspace:*",
+    "@dominio-x/queue": "workspace:*",
+    "@dominio-x/source-adapters": "workspace:*",
+    "@dominio-x/storage": "workspace:*",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/helmet": "^13.1.1",
+    "@fastify/rate-limit": "^11.2.0",
+    "@fastify/swagger": "^9.8.1",
+    "@fastify/swagger-ui": "^5.0.7",
+    "drizzle-orm": "^0.45.2",
+    "fastify": "^5.12.1",
+    "fastify-type-provider-zod": "^7.0.0",
+    "ioredis": "^5.11.1",
+    "zod": "^4.5.4",
+    "@dominio-x/rule-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@dominio-x/test-utils": "workspace:*",
+    "rimraf": "^6.0.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.13"
+  }
+}

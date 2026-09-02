@@ -1,0 +1,30 @@
+{
+  "name": "@dominio-x/scheduler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/registro-br.ts",
+    "build": "tsup",
+    "start": "node dist/registro-br.js",
+    "retention": "node dist/retention.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@dominio-x/config": "workspace:*",
+    "@dominio-x/contracts": "workspace:*",
+    "@dominio-x/database": "workspace:*",
+    "@dominio-x/domain-core": "workspace:*",
+    "@dominio-x/observability": "workspace:*",
+    "@dominio-x/providers": "workspace:*",
+    "@dominio-x/queue": "workspace:*",
+    "@dominio-x/source-adapters": "workspace:*",
+    "@dominio-x/storage": "workspace:*"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.13"
+  }
+}
