@@ -18,7 +18,7 @@
 | Bucket `dominio-x-data` (`5665b178-…`)                        | created at project level but Railway never instantiated it in the environment (`BucketInstance not found`, also after staging/committing it); **interim `STORAGE_DRIVER=fs`** on api/worker (artifacts on the container disk) |
 | Stray bucket `stashed-stashbox-E4JW` (`9a3ae655-…`)           | created by a diagnostic retry (the API ignored the name); delete it in the dashboard                                                                                                                                          |
 | Providers                                                     | lexical, dns active · rdap disabled by default · crawler disabled (see above) · **Semrush standby** (`decision_pending`, no outbound calls)                                                                                   |
-| Smoke test                                                    | health/ready/web/login/submit/run creation pass; the first analysis waited on the crawl stage (10 min timeout) before the crawler was disabled                                                                                |
+| Smoke test                                                    | **passed** (`scripts/smoke-production.sh`: health, ready, web, login, submit, analysis completed in < 4 min, detail, logout); first run also completed after the 10-min crawl timeout                                         |
 | Quality gates                                                 | lint ✓ · typecheck ✓ · 135 tests ✓ · build ✓ · Playwright critical flow ✓ (local stack) · GitHub Actions CI ✓                                                                                                                 |
 
 ## What the operator must do

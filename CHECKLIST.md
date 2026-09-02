@@ -60,7 +60,8 @@ Legend: [x] done · [~] partial / blocked · [ ] not started
 - [x] Projects provisioned: `dominio-x-core` (Postgres, Redis, bucket, web/api/worker, domains, variables), `dominio-x-crawlers`
 - [x] `api`, `web`, `worker` deployed and healthy (migrations applied, seed + admin bootstrap done)
 - [~] `scheduler-registro-br` and `crawler` blocked by the Railway plan limit; bucket instance not provisioned (interim fs storage)
-- [~] Smoke test: infrastructure checks pass; Registro.br verification pending the scheduler service
+- [x] Production smoke test passes (health, ready, web, login, submit, analysis completed, detail, logout)
+- [ ] Registro.br production verification (needs the scheduler service → plan upgrade)
 
 ## Quality gates (local, 2026-09-02)
 - [x] `pnpm lint` · `pnpm typecheck` · `pnpm test` (135 tests: unit + integration incl. API, pipeline, SSRF) · `pnpm build`
