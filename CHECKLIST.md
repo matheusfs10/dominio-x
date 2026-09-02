@@ -58,8 +58,9 @@ Legend: [x] done · [~] partial / blocked · [ ] not started
 - [x] API-based provisioning script + `.railway/railway.ts` (build/start, health checks, cron, pre-deploy migration)
 - [x] Smoke script, GitHub Actions CI (green)
 - [x] Projects provisioned: `dominio-x-core` (Postgres, Redis, bucket, web/api/worker, domains, variables), `dominio-x-crawlers`
-- [~] Builds blocked: workspace on trial without payment method ("resource provision limit"); `scheduler-registro-br` and `crawler` services still to create
-- [ ] Migrations, smoke test, Registro.br verification (after the first successful build)
+- [x] `api`, `web`, `worker` deployed and healthy (migrations applied, seed + admin bootstrap done)
+- [~] `scheduler-registro-br` and `crawler` blocked by the Railway plan limit; bucket instance not provisioned (interim fs storage)
+- [~] Smoke test: infrastructure checks pass; Registro.br verification pending the scheduler service
 
 ## Quality gates (local, 2026-09-02)
 - [x] `pnpm lint` · `pnpm typecheck` · `pnpm test` (135 tests: unit + integration incl. API, pipeline, SSRF) · `pnpm build`

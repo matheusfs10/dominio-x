@@ -67,6 +67,11 @@ Variables: `NODE_ENV=production`, `CRAWLER_CORE_API_URL=<api domain>`, `CRAWLER_
 (same value as the api; cross-project references are not possible), `CRAWLER_*` limits, `LOG_LEVEL`.
 **Never** `DATABASE_URL`, `REDIS_URL`, `SEMRUSH_*`, `SESSION_SECRET` or bucket credentials.
 
+## Current interim settings
+
+- `CRAWLER_ENABLED=false` on api/worker until the `crawler` service exists (plan limit).
+- `STORAGE_DRIVER=fs` on api/worker until the bucket instance exists; switch back to the `S3_*` references then.
+
 ## Plan requirements
 
 Railway's Trial/Free tier limits the number of provisioned resources and did not build code
