@@ -23,7 +23,7 @@ const REGION = "us-east4-eqdc4a";
 export default defineRailway(() => {
   const db = postgres("Postgres");
   const cache = redis("Redis");
-  const data = bucket("dominio-x-data", { region: "iad" });
+  const data = bucket("data-dominio-x", { region: "iad" });
 
   const shared = {
     NODE_ENV: "production",

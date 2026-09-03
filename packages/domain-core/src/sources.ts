@@ -80,7 +80,10 @@ export async function ingestArtifact(ctx: CoreContext, input: IngestInput): Prom
       eq(sourceBatches.contentSha256, artifact.sha256),
     ),
   });
-  if (existing) {
+  // A batch that failed mid-ingestion is resumed in place: every step below is idempotent
+  // (domain upserts, ON CONFLICT DO NOTHING links, run creation skips active runs).
+  const resume = existing?.status === "failed" ? existing : null;
+  if (existing && !resume) {
     ctx.logger.info(
       { sourceKey: adapter.key, sourceBatchId: existing.id, sha256: artifact.sha256 },
       "source content already ingested; no new batch",
@@ -99,60 +102,74 @@ export async function ingestArtifact(ctx: CoreContext, input: IngestInput): Prom
     };
   }
 
-  const artifactKey = artifactKeyFor(adapter.key, artifact);
-  await ctx.storage.putObject({
-    key: artifactKey,
-    body: artifact.content,
-    contentType: artifact.contentType ?? "text/plain",
-    metadata: { sha256: artifact.sha256, source: adapter.key },
-  });
+  const artifactKey = resume?.artifactKey ?? artifactKeyFor(adapter.key, artifact);
+  if (!resume?.artifactKey) {
+    await ctx.storage.putObject({
+      key: artifactKey,
+      body: artifact.content,
+      contentType: artifact.contentType ?? "text/plain",
+      metadata: { sha256: artifact.sha256, source: adapter.key },
+    });
+  }
 
   let batch: SourceBatch;
-  try {
+  if (resume) {
     const [row] = await ctx.db
-      .insert(sourceBatches)
-      .values({
-        sourceId: source.id,
-        name: input.name ?? null,
-        externalReference: artifact.url,
-        status: "ingesting",
-        contentSha256: artifact.sha256,
-        artifactKey,
-        etag: artifact.etag,
-        lastModified: artifact.lastModified,
-        detectedAt: artifact.fetchedAt,
-        createdBy: input.createdBy ?? null,
-        metadataJson: {
-          httpStatus: artifact.httpStatus,
-          contentType: artifact.contentType,
-          contentLength: artifact.content.length,
-          ...artifact.metadata,
-        },
-      })
+      .update(sourceBatches)
+      .set({ status: "ingesting", artifactKey })
+      .where(eq(sourceBatches.id, resume.id))
       .returning();
     batch = row!;
-  } catch (error) {
-    const again = await ctx.db.query.sourceBatches.findFirst({
-      where: and(
-        eq(sourceBatches.sourceId, source.id),
-        eq(sourceBatches.contentSha256, artifact.sha256),
-      ),
-    });
-    if (again)
-      return {
-        batch: again,
-        created: false,
-        stats: {
-          total: again.domainCount,
-          newDomains: again.newDomainCount,
-          invalid: again.invalidLineCount,
-          duplicates: 0,
-          runsCreated: 0,
-          enqueued: 0,
-        },
-      };
-    throw error;
-  }
+    ctx.logger.warn(
+      { sourceKey: adapter.key, sourceBatchId: batch.id },
+      "resuming failed batch ingestion",
+    );
+  } else
+    try {
+      const [row] = await ctx.db
+        .insert(sourceBatches)
+        .values({
+          sourceId: source.id,
+          name: input.name ?? null,
+          externalReference: artifact.url,
+          status: "ingesting",
+          contentSha256: artifact.sha256,
+          artifactKey,
+          etag: artifact.etag,
+          lastModified: artifact.lastModified,
+          detectedAt: artifact.fetchedAt,
+          createdBy: input.createdBy ?? null,
+          metadataJson: {
+            httpStatus: artifact.httpStatus,
+            contentType: artifact.contentType,
+            contentLength: artifact.content.length,
+            ...artifact.metadata,
+          },
+        })
+        .returning();
+      batch = row!;
+    } catch (error) {
+      const again = await ctx.db.query.sourceBatches.findFirst({
+        where: and(
+          eq(sourceBatches.sourceId, source.id),
+          eq(sourceBatches.contentSha256, artifact.sha256),
+        ),
+      });
+      if (again)
+        return {
+          batch: again,
+          created: false,
+          stats: {
+            total: again.domainCount,
+            newDomains: again.newDomainCount,
+            invalid: again.invalidLineCount,
+            duplicates: 0,
+            runsCreated: 0,
+            enqueued: 0,
+          },
+        };
+      throw error;
+    }
 
   const log = ctx.logger.child({ sourceKey: adapter.key, sourceBatchId: batch.id });
   try {
@@ -303,15 +320,17 @@ export async function watchRegistroBr(
     where: eq(sourceBatches.sourceId, source.id),
     orderBy: desc(sourceBatches.detectedAt),
   });
+  // A failed batch must be re-fetched and re-ingested: no conditional request, no SHA short-circuit.
+  const retryFailed = last?.status === "failed";
   const artifact = await adapter.fetch({
-    lastEtag: last?.etag ?? null,
-    lastModified: last?.lastModified ?? null,
+    lastEtag: retryFailed ? null : (last?.etag ?? null),
+    lastModified: retryFailed ? null : (last?.lastModified ?? null),
   });
   if (artifact.notModified) {
     ctx.logger.info({ etag: artifact.etag }, "registro.br: not modified (304)");
     return { changed: false, reason: "not_modified", httpStatus: artifact.httpStatus, batch: last };
   }
-  if (last && last.contentSha256 === artifact.sha256) {
+  if (last && !retryFailed && last.contentSha256 === artifact.sha256) {
     ctx.logger.info({ sha256: artifact.sha256 }, "registro.br: identical content (sha256 match)");
     return { changed: false, reason: "same_sha", httpStatus: artifact.httpStatus, batch: last };
   }

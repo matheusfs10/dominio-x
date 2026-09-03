@@ -87,16 +87,22 @@ export async function createAnalysisRunsBulk(
   input: Omit<CreateRunInput, "domainId">,
 ): Promise<AnalysisRun[]> {
   if (domainIds.length === 0) return [];
-  const active = await db
-    .select({ domainId: analysisRuns.domainId })
-    .from(analysisRuns)
-    .where(
-      and(
-        inArray(analysisRuns.domainId, domainIds),
-        inArray(analysisRuns.status, ["queued", "running"]),
-      ),
-    );
-  const skip = new Set(active.map((a) => a.domainId));
+  // Look up active runs in bounded chunks: one IN (...) with 150k+ ids exceeds PostgreSQL's
+  // bind-parameter limit and makes the query builder recurse deeply.
+  const skip = new Set<string>();
+  const LOOKUP = 5000;
+  for (let i = 0; i < domainIds.length; i += LOOKUP) {
+    const active = await db
+      .select({ domainId: analysisRuns.domainId })
+      .from(analysisRuns)
+      .where(
+        and(
+          inArray(analysisRuns.domainId, domainIds.slice(i, i + LOOKUP)),
+          inArray(analysisRuns.status, ["queued", "running"]),
+        ),
+      );
+    for (const a of active) skip.add(a.domainId);
+  }
   const targets = domainIds.filter((id) => !skip.has(id));
   const created: AnalysisRun[] = [];
   const CHUNK = 500;
