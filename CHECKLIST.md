@@ -61,9 +61,9 @@ Legend: [x] done · [~] partial / blocked · [ ] not started
 - [x] `api`, `web`, `worker` deployed and healthy (migrations applied, seed + admin bootstrap done)
 - [x] `crawler` deployed in its isolated project and verified end to end in production (job lease → HTTPS fetch → observations)
 - [x] Production smoke test passes (health, ready, web, login, submit, analysis completed, detail, logout)
-- [~] Artifact storage: interim `STORAGE_DRIVER=fs`; the Railway API cannot provision a bucket instance, so the bucket must be created in the dashboard
-- [~] `scheduler-registro-br` created and configured (cron `0 */6 * * *`) but deliberately not deployed until storage is durable (see docs/deployment-report.md)
-- [ ] Registro.br production verification (after the bucket + scheduler deploy)
+- [x] Artifact storage on the Railway bucket `data-dominio-x` (created in the dashboard; api/worker/scheduler use `${{data-dominio-x.*}}` references)
+- [x] `scheduler-registro-br` deployed (cron `0 */6 * * *` UTC, exits when done); Postgres volume 5 GB, Redis 2 GB
+- [x] Registro.br production verification: 158,227 domains ingested (0 invalid), raw artifact in the bucket, immutable batch, analyses enqueued, second run reports 304 with no new batch; failed batches are resumed automatically
 
 ## Quality gates (local, 2026-09-02)
 - [x] `pnpm lint` · `pnpm typecheck` · `pnpm test` (135 tests: unit + integration incl. API, pipeline, SSRF) · `pnpm build`

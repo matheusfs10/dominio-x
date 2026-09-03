@@ -14,38 +14,25 @@
       "Redis": "5804e4de-a267-4f81-9d85-5b22d6c92ba4"
     },
     "bucket": {
-      "intended": "dominio-x-data",
-      "note": "bucketCreate via the public API only creates the project-level record; no BucketInstance is ever provisioned in the environment (verified on the Hobby plan too). Create/deploy the bucket in the dashboard, then run `railway-provision.mjs variables`.",
-      "projectLevelRecords": [
-        {
-          "id": "5665b178-138b-4392-8891-077e69ec5fe7",
-          "name": "dominio-x-data",
-          "instance": "missing"
-        },
-        {
-          "id": "9a3ae655-9e92-4588-9165-91ad7241b777",
-          "name": "stashed-stashbox-E4JW",
-          "instance": "missing",
-          "note": "delete"
-        },
-        {
-          "id": "93c46691-e110-4345-9968-9e4f1a2e259e",
-          "name": "dominio-x-artifacts",
-          "instance": "missing",
-          "note": "delete"
-        }
-      ]
+      "id": "748cc192-b388-4443-9dc4-292bd839b0f9",
+      "name": "data-dominio-x",
+      "s3Bucket": "data-dominio-x-atjm6zjgau",
+      "region": "iad",
+      "note": "created in the dashboard; the public API never provisions bucket instances. Delete the three empty API-created records: 5665b178 (dominio-x-data), 9a3ae655 (stashed-stashbox-E4JW), 93c46691 (dominio-x-artifacts)."
     },
     "domains": {
       "web": "https://web-production-46901.up.railway.app",
       "api": "https://api-production-fec75.up.railway.app"
     },
-    "interim": {
-      "STORAGE_DRIVER": "fs",
-      "reason": "no bucket instance; switch api/worker to the s3 references once the bucket is deployed in the dashboard"
-    },
-    "pending": {
-      "scheduler-registro-br": "created and configured (cron 0 */6 * * * UTC, region us-east4-eqdc4a) but intentionally NOT deployed and without variables: with fs storage the cron container would write the raw Registro.br artifact to an ephemeral disk, and the SHA-256 dedupe would then prevent it from ever being re-stored for that release list. Deploy after the bucket works."
+    "volumes": {
+      "postgres": {
+        "id": "7caab2af-67c5-4503-b115-f107508fb04b",
+        "sizeMB": 5000
+      },
+      "redis": {
+        "id": "b4c1ff65-5fb4-4b5e-acf8-96595dcb56e2",
+        "sizeMB": 2000
+      }
     }
   },
   "crawlers": {
