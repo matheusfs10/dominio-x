@@ -9,36 +9,50 @@
       "web": "95d790d4-d425-4f05-ab3e-c7ba302e2364",
       "api": "d780807f-c760-45d6-ae6a-1d00ef927e30",
       "worker": "1726675f-3494-424a-89e8-1e689174d3a8",
-      "scheduler-registro-br": null,
+      "scheduler-registro-br": "928d4e2a-49f3-4b90-9f94-3d61499b0a49",
       "Postgres": "a42dd9da-8b7a-4796-994a-a5cc1906da44",
       "Redis": "5804e4de-a267-4f81-9d85-5b22d6c92ba4"
     },
     "bucket": {
-      "id": "5665b178-138b-4392-8891-077e69ec5fe7",
-      "name": "dominio-x-data",
-      "instance": "missing (see docs/deployment-report.md)"
+      "intended": "dominio-x-data",
+      "note": "bucketCreate via the public API only creates the project-level record; no BucketInstance is ever provisioned in the environment (verified on the Hobby plan too). Create/deploy the bucket in the dashboard, then run `railway-provision.mjs variables`.",
+      "projectLevelRecords": [
+        {
+          "id": "5665b178-138b-4392-8891-077e69ec5fe7",
+          "name": "dominio-x-data",
+          "instance": "missing"
+        },
+        {
+          "id": "9a3ae655-9e92-4588-9165-91ad7241b777",
+          "name": "stashed-stashbox-E4JW",
+          "instance": "missing",
+          "note": "delete"
+        },
+        {
+          "id": "93c46691-e110-4345-9968-9e4f1a2e259e",
+          "name": "dominio-x-artifacts",
+          "instance": "missing",
+          "note": "delete"
+        }
+      ]
     },
     "domains": {
       "web": "https://web-production-46901.up.railway.app",
       "api": "https://api-production-fec75.up.railway.app"
     },
-    "strayBuckets": [
-      {
-        "id": "9a3ae655-9e92-4588-9165-91ad7241b777",
-        "name": "stashed-stashbox-E4JW",
-        "note": "created by a diagnostic retry; delete in the dashboard"
-      }
-    ],
     "interim": {
       "STORAGE_DRIVER": "fs",
-      "reason": "bucket instance not provisioned; switch to s3 references when available"
+      "reason": "no bucket instance; switch api/worker to the s3 references once the bucket is deployed in the dashboard"
+    },
+    "pending": {
+      "scheduler-registro-br": "created and configured (cron 0 */6 * * * UTC, region us-east4-eqdc4a) but intentionally NOT deployed and without variables: with fs storage the cron container would write the raw Registro.br artifact to an ephemeral disk, and the SHA-256 dedupe would then prevent it from ever being re-stored for that release list. Deploy after the bucket works."
     }
   },
   "crawlers": {
     "projectId": "c43a5643-cf1d-46e7-aee1-00bfcf32e68d",
     "environmentId": "852cadbe-0674-4677-b788-876bdafc4f56",
     "services": {
-      "crawler": null
+      "crawler": "b2e28e50-e097-43c4-a492-2eb6806ff302"
     }
   }
 }

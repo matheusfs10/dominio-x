@@ -59,9 +59,11 @@ Legend: [x] done · [~] partial / blocked · [ ] not started
 - [x] Smoke script, GitHub Actions CI (green)
 - [x] Projects provisioned: `dominio-x-core` (Postgres, Redis, bucket, web/api/worker, domains, variables), `dominio-x-crawlers`
 - [x] `api`, `web`, `worker` deployed and healthy (migrations applied, seed + admin bootstrap done)
-- [~] `scheduler-registro-br` and `crawler` blocked by the Railway plan limit; bucket instance not provisioned (interim fs storage)
+- [x] `crawler` deployed in its isolated project and verified end to end in production (job lease → HTTPS fetch → observations)
 - [x] Production smoke test passes (health, ready, web, login, submit, analysis completed, detail, logout)
-- [ ] Registro.br production verification (needs the scheduler service → plan upgrade)
+- [~] Artifact storage: interim `STORAGE_DRIVER=fs`; the Railway API cannot provision a bucket instance, so the bucket must be created in the dashboard
+- [~] `scheduler-registro-br` created and configured (cron `0 */6 * * *`) but deliberately not deployed until storage is durable (see docs/deployment-report.md)
+- [ ] Registro.br production verification (after the bucket + scheduler deploy)
 
 ## Quality gates (local, 2026-09-02)
 - [x] `pnpm lint` · `pnpm typecheck` · `pnpm test` (135 tests: unit + integration incl. API, pipeline, SSRF) · `pnpm build`
