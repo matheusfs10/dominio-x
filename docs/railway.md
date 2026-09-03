@@ -49,7 +49,7 @@ SESSION_SECRET / CRAWLER_MACHINE_TOKEN     # generated once (openssl rand -hex 3
 CRAWLER_ENABLED=true  SEMRUSH_ENABLED=false (standby)  SEMRUSH_DATA_TTL_DAYS=30  PROVIDER_RESTRICTED_RETENTION_DAYS=30
 ```
 
-`api` adds `PORT=4000 HOST=0.0.0.0 TRUST_PROXY=true`. `web`: `NODE_ENV=production`,
+`api` adds `PORT=4000 HOST=:: TRUST_PROXY=true`. `web`: `NODE_ENV=production`,
 `API_INTERNAL_URL=http://${{api.RAILWAY_PRIVATE_DOMAIN}}:4000`, `API_URL`, `APP_URL`.
 
 Bootstrap admin: set `BOOTSTRAP_ADMIN_EMAIL`/`BOOTSTRAP_ADMIN_PASSWORD` on `api` once and execute

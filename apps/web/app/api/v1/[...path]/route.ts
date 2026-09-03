@@ -48,9 +48,18 @@ async function proxy(
       redirect: "manual",
       cache: "no-store",
     });
-  } catch {
+  } catch (error) {
+    // Surface the transport reason (ECONNREFUSED, ENOTFOUND, ...) so a broken private-network
+    // path is diagnosable from the web logs and the UI instead of a bare 503.
+    const cause = (error as { cause?: { code?: string; message?: string } }).cause;
+    const detail =
+      cause?.code ?? cause?.message ?? (error instanceof Error ? error.message : "unknown");
+    console.error("[api-proxy] upstream fetch failed", {
+      target: target.replace(/\?.*$/, ""),
+      detail,
+    });
     return Response.json(
-      { error: { code: "SERVICE_UNAVAILABLE", message: "API unreachable." } },
+      { error: { code: "SERVICE_UNAVAILABLE", message: `API unreachable (${detail}).` } },
       { status: 503 },
     );
   }

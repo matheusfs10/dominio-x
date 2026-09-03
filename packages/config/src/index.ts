@@ -145,7 +145,7 @@ export const apiConfigSchema = baseSchema
   .extend(registroBrSchema.shape)
   .extend({
     PORT: z.coerce.number().int().min(1).max(65535).default(4000),
-    HOST: z.string().default("0.0.0.0"),
+    HOST: z.string().default("::"),
     LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(10),
     LOGIN_RATE_LIMIT_WINDOW_MS: z.coerce
       .number()

@@ -317,7 +317,7 @@ try {
     await upsertVariables(state.core, state.core.services.api, {
       ...shared,
       PORT: "4000",
-      HOST: "0.0.0.0",
+      HOST: "::",
       TRUST_PROXY: "true",
     });
     await upsertVariables(state.core, state.core.services.worker, shared);

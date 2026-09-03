@@ -54,7 +54,7 @@ export default defineRailway(() => {
     healthcheck: "/health",
     healthcheckTimeout: 120,
     replicas: { [REGION]: 1 },
-    env: { ...shared, PORT: "4000", HOST: "0.0.0.0", TRUST_PROXY: "true" },
+    env: { ...shared, PORT: "4000", HOST: "::", TRUST_PROXY: "true" },
   });
 
   const worker = service("worker", {
