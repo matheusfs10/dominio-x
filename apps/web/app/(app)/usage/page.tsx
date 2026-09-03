@@ -54,12 +54,12 @@ export default function UsagePage() {
   return (
     <div>
       <PageHeader
-        title="Usage & Costs"
+        title="Uso e custos"
         actions={
           <Select value={days} onChange={(e) => setDays(Number(e.target.value))} className="w-32">
             {[7, 30, 90].map((d) => (
               <option key={d} value={d}>
-                {d} days
+                {d} dias
               </option>
             ))}
           </Select>
@@ -67,29 +67,32 @@ export default function UsagePage() {
       />
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
         <Stat
-          label="Semrush units (month)"
+          label="Unidades Semrush (mês)"
           value={fmtNumber(u.semrush.unitsThisMonth)}
           hint={
             u.semrush.monthlyBudget
-              ? `budget ${fmtNumber(u.semrush.monthlyBudget)} · ${fmtPercent(u.semrush.utilization)}`
-              : "no monthly budget set"
+              ? `orçamento ${fmtNumber(u.semrush.monthlyBudget)} · ${fmtPercent(u.semrush.utilization)}`
+              : "sem orçamento mensal definido"
           }
         />
-        <Stat label="Semrush cost (month)" value={`$${fmtNumber(u.semrush.costThisMonthUsd, 2)}`} />
         <Stat
-          label="Cache hit rate"
+          label="Custo Semrush (mês)"
+          value={`US$ ${fmtNumber(u.semrush.costThisMonthUsd, 2)}`}
+        />
+        <Stat
+          label="Reaproveitamento (cache)"
           value={fmtPercent(u.cache.hitRate)}
-          hint={`${fmtNumber(u.cache.reusedObservations)} reused · ${fmtNumber(u.cache.providerCalls)} calls`}
+          hint={`${fmtNumber(u.cache.reusedObservations)} reutilizadas · ${fmtNumber(u.cache.providerCalls)} chamadas`}
         />
         <Stat
-          label="Paid skipped by gate"
+          label="Pagas barradas pelo gate"
           value={fmtNumber(u.paidSkipped.byCandidateGate)}
-          hint={`${fmtNumber(u.paidSkipped.byBudget)} by budget`}
+          hint={`${fmtNumber(u.paidSkipped.byBudget)} por orçamento`}
         />
         <Stat
-          label="Semrush standby"
+          label="Semrush em standby"
           value={fmtNumber(u.paidSkipped.decisionPending)}
-          hint="analyses awaiting integration decision"
+          hint="análises aguardando a decisão de integração"
         />
       </div>
       {u.semrush.monthlyBudget && (
@@ -101,18 +104,18 @@ export default function UsagePage() {
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title={`Totals (${u.days} days)`}>
+        <Card title={`Totais (${u.days} dias)`}>
           <table>
             <thead>
               <tr>
-                <th>Provider</th>
-                <th>Requests</th>
-                <th>Units</th>
-                <th>Cost</th>
-                <th>Errors</th>
-                <th>Failure</th>
-                <th>Cached</th>
-                <th>Last success</th>
+                <th>Provedor</th>
+                <th>Requisições</th>
+                <th>Unidades</th>
+                <th>Custo</th>
+                <th>Erros</th>
+                <th>Taxa de falha</th>
+                <th>Em cache</th>
+                <th>Último sucesso</th>
               </tr>
             </thead>
             <tbody>
@@ -121,7 +124,7 @@ export default function UsagePage() {
                   <td>{t.providerKey}</td>
                   <td>{fmtNumber(t.requests)}</td>
                   <td>{fmtNumber(t.units)}</td>
-                  <td>${fmtNumber(t.costUsd, 2)}</td>
+                  <td>US$ {fmtNumber(t.costUsd, 2)}</td>
                   <td>{fmtNumber(t.errors)}</td>
                   <td>{fmtPercent(t.failureRate)}</td>
                   <td>{fmtNumber(t.cached)}</td>
@@ -131,16 +134,16 @@ export default function UsagePage() {
             </tbody>
           </table>
         </Card>
-        <Card title="Requests by provider / day">
+        <Card title="Requisições por provedor / dia">
           <div className="max-h-96 overflow-auto">
             <table>
               <thead>
                 <tr>
-                  <th>Day</th>
-                  <th>Provider</th>
-                  <th>Requests</th>
-                  <th>Units</th>
-                  <th>Errors</th>
+                  <th>Dia</th>
+                  <th>Provedor</th>
+                  <th>Requisições</th>
+                  <th>Unidades</th>
+                  <th>Erros</th>
                 </tr>
               </thead>
               <tbody>

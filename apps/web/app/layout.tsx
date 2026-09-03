@@ -5,7 +5,7 @@ import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "Dominio-X",
-  description: "Internal domain intelligence platform",
+  description: "Plataforma interna de inteligência de domínios",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

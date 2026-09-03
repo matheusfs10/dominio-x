@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { fmtDate, fmtNumber } from "@/lib/format";
+import { fmtDate, fmtNumber, label } from "@/lib/format";
 import { useRole } from "@/components/shell";
 import { Badge, Button, Card, ErrorBox, KeyValue, Loading, PageHeader } from "@/components/ui";
 import { Funnel } from "@/components/funnel";
@@ -66,22 +66,21 @@ export default function BatchDetailPage() {
         title={batch.name ?? `${batch.sourceName} · ${fmtDate(batch.detectedAt)}`}
         subtitle={
           <span>
-            {batch.sourceKey} ·{" "}
-            <Badge value={batch.status} tone="bg-neutral-200 text-neutral-700" />
+            {label(batch.sourceKey)} · <Badge value={batch.status} />
           </span>
         }
         actions={
           isAnalyst && (
             <>
               <Button onClick={() => artifact.mutate()} disabled={!batch.artifactKey}>
-                Raw artifact
+                Arquivo original
               </Button>
-              <Button onClick={() => analyze.mutate(true)}>Analyze new</Button>
+              <Button onClick={() => analyze.mutate(true)}>Analisar novos</Button>
               <Button variant="primary" onClick={() => analyze.mutate(false)}>
-                Re-analyze all
+                Reanalisar todos
               </Button>
               <Link href={`/domains?batchId=${id}`}>
-                <Button>Explore domains</Button>
+                <Button>Explorar domínios</Button>
               </Link>
             </>
           )
@@ -89,16 +88,16 @@ export default function BatchDetailPage() {
       />
       <ErrorBox error={analyze.error ?? artifact.error} />
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Funnel">
+        <Card title="Funil">
           <Funnel funnel={funnel} />
         </Card>
-        <Card title="Batch">
+        <Card title="Lote">
           <KeyValue
             items={[
-              ["detected", fmtDate(batch.detectedAt)],
-              ["published (file generated)", fmtDate(batch.publishedAt)],
+              ["detectado em", fmtDate(batch.detectedAt)],
+              ["publicado (arquivo gerado em)", fmtDate(batch.publishedAt)],
               [
-                "release period",
+                "período de liberação",
                 parse?.releasePeriodStart
                   ? `${parse.releasePeriodStart} → ${parse.releasePeriodEnd}`
                   : "—",
@@ -111,38 +110,41 @@ export default function BatchDetailPage() {
               ],
               ["etag", batch.etag ?? "—"],
               [
-                "artifact",
+                "arquivo",
                 <span key="a" className="font-mono text-xs">
                   {batch.artifactKey ?? "—"}
                 </span>,
               ],
               [
-                "size",
+                "tamanho",
                 batch.metadataJson.contentLength
                   ? `${fmtNumber(batch.metadataJson.contentLength)} bytes`
                   : "—",
               ],
               [
-                "lines",
+                "linhas",
                 parse
-                  ? `${fmtNumber(parse.totalLines)} total · ${fmtNumber(batch.invalidLineCount)} invalid · ${fmtNumber(parse.duplicateLines)} duplicate`
+                  ? `${fmtNumber(parse.totalLines)} no total · ${fmtNumber(batch.invalidLineCount)} inválidas · ${fmtNumber(parse.duplicateLines)} duplicadas`
                   : "—",
               ],
               [
-                "domains",
-                `${fmtNumber(batch.domainCount)} (${fmtNumber(batch.newDomainCount)} new, ${fmtNumber(funnel.previouslySeen)} previously seen)`,
+                "domínios",
+                `${fmtNumber(batch.domainCount)} (${fmtNumber(batch.newDomainCount)} novos, ${fmtNumber(funnel.previouslySeen)} já conhecidos)`,
               ],
             ]}
           />
         </Card>
         {parse?.issues?.length ? (
-          <Card title={`Parse issues (first ${parse.issues.length})`} className="lg:col-span-2">
+          <Card
+            title={`Problemas de leitura (primeiros ${parse.issues.length})`}
+            className="lg:col-span-2"
+          >
             <table>
               <thead>
                 <tr>
-                  <th>Line</th>
-                  <th>Raw</th>
-                  <th>Reason</th>
+                  <th>Linha</th>
+                  <th>Conteúdo</th>
+                  <th>Motivo</th>
                 </tr>
               </thead>
               <tbody>

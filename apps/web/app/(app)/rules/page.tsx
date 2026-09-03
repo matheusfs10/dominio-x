@@ -33,7 +33,7 @@ export default function RulesPage() {
   const createDraft = useMutation({
     mutationFn: () =>
       api.post<{ ruleset: { id: string } }>("/rulesets", {
-        name: "New draft",
+        name: "Novo rascunho",
         description: "",
         rules: [],
       }),
@@ -42,12 +42,12 @@ export default function RulesPage() {
   return (
     <div>
       <PageHeader
-        title="Rules"
-        subtitle="Versioned rulesets. Active versions are immutable: clone to a draft, edit, test, then activate."
+        title="Regras"
+        subtitle="Conjuntos de regras versionados. Versões ativas são imutáveis: clone para um rascunho, edite, teste e depois ative."
         actions={
           isAnalyst && (
             <Button variant="primary" onClick={() => createDraft.mutate()}>
-              New empty draft
+              Novo rascunho vazio
             </Button>
           )
         }
@@ -62,12 +62,12 @@ export default function RulesPage() {
           <table>
             <thead>
               <tr>
-                <th>Version</th>
-                <th>Name</th>
+                <th>Versão</th>
+                <th>Nome</th>
                 <th>Status</th>
-                <th>Rules</th>
-                <th>Created</th>
-                <th>Activated</th>
+                <th>Regras</th>
+                <th>Criado em</th>
+                <th>Ativado em</th>
                 <th></th>
               </tr>
             </thead>
@@ -93,7 +93,7 @@ export default function RulesPage() {
                   <td>
                     {isAnalyst && (
                       <Button size="sm" onClick={() => clone.mutate(r.id)}>
-                        Clone
+                        Clonar
                       </Button>
                     )}
                   </td>
@@ -104,7 +104,7 @@ export default function RulesPage() {
         )}
         {q.data && (
           <p className="mt-3 text-xs text-neutral-500">
-            Operators: {q.data.operators.join(", ")}. Actions: reject, quarantine, warn, tag,
+            Operadores: {q.data.operators.join(", ")}. Ações: reject, quarantine, warn, tag,
             score_adjustment, candidate_allow, candidate_deny.
           </p>
         )}

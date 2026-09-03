@@ -33,8 +33,8 @@ export default function AuditPage() {
   return (
     <div>
       <PageHeader
-        title="Audit"
-        subtitle="Authentication, activation, shortlist, provider and admin events."
+        title="Auditoria"
+        subtitle="Eventos de autenticação, ativações, shortlists, provedores e administração."
         actions={
           <form
             className="flex gap-2"
@@ -44,12 +44,12 @@ export default function AuditPage() {
             }}
           >
             <Input
-              placeholder="action (e.g. auth.login)"
+              placeholder="ação (ex.: auth.login)"
               value={action}
               onChange={(e) => setAction(e.target.value)}
               className="w-56"
             />
-            <Button type="submit">Filter</Button>
+            <Button type="submit">Filtrar</Button>
           </form>
         }
       />
@@ -64,12 +64,12 @@ export default function AuditPage() {
           <table>
             <thead>
               <tr>
-                <th>When</th>
-                <th>Action</th>
-                <th>Actor</th>
-                <th>Target</th>
+                <th>Quando</th>
+                <th>Ação</th>
+                <th>Autor</th>
+                <th>Alvo</th>
                 <th>IP</th>
-                <th>Details</th>
+                <th>Detalhes</th>
               </tr>
             </thead>
             <tbody>
@@ -92,7 +92,7 @@ export default function AuditPage() {
         )}
         {q.hasNextPage && (
           <div className="mt-3 text-center">
-            <Button onClick={() => q.fetchNextPage()}>Load more</Button>
+            <Button onClick={() => q.fetchNextPage()}>Carregar mais</Button>
           </div>
         )}
       </Card>

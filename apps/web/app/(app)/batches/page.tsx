@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, qs } from "@/lib/api";
-import { fmtDate, fmtNumber } from "@/lib/format";
+import { fmtDate, fmtNumber, label } from "@/lib/format";
 import { useRole } from "@/components/shell";
 import {
   Badge,
@@ -63,23 +63,23 @@ export default function BatchesPage() {
   return (
     <div>
       <PageHeader
-        title="Release Batches"
-        subtitle="Every distinct source version is an immutable batch (raw artifact + SHA-256 preserved)."
+        title="Lotes de liberação"
+        subtitle="Cada versão distinta de uma fonte vira um lote imutável (arquivo original e SHA-256 preservados)."
       />
       {isAnalyst && (
-        <Card title="Import CSV / list" className="mb-4">
+        <Card title="Importar CSV / lista" className="mb-4">
           <div className="grid gap-3 md:grid-cols-3">
             <div className="md:col-span-2">
               <Textarea
                 rows={5}
-                placeholder={"domain\nexemplo.com.br\noutro.com.br"}
+                placeholder={"dominio\nexemplo.com.br\noutro.com.br"}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
               />
             </div>
             <div className="space-y-2">
               <Input
-                placeholder="batch name (optional)"
+                placeholder="nome do lote (opcional)"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
@@ -89,26 +89,27 @@ export default function BatchesPage() {
                   checked={analyze}
                   onChange={(e) => setAnalyze(e.target.checked)}
                 />{" "}
-                analyze after import (local stages only)
+                analisar após importar (só etapas locais)
               </label>
               <Button
                 variant="primary"
                 disabled={!content.trim() || importCsv.isPending}
                 onClick={() => importCsv.mutate()}
               >
-                Import
+                Importar
               </Button>
               <ErrorBox error={importCsv.error} />
               {importCsv.data && (
                 <div className="text-xs text-neutral-600">
-                  {importCsv.data.created ? "Imported" : "Already imported"}:{" "}
-                  {importCsv.data.stats.total} domains, {importCsv.data.stats.newDomains} new,{" "}
-                  {importCsv.data.stats.invalid} invalid, {importCsv.data.stats.runsCreated} runs.
+                  {importCsv.data.created ? "Importado" : "Já importado"}:{" "}
+                  {importCsv.data.stats.total} domínios, {importCsv.data.stats.newDomains} novos,{" "}
+                  {importCsv.data.stats.invalid} inválidos, {importCsv.data.stats.runsCreated}{" "}
+                  análises.
                   {importCsv.data.issues.length > 0 && (
                     <ul className="mt-1 max-h-24 overflow-auto font-mono">
                       {importCsv.data.issues.map((i) => (
                         <li key={i.line}>
-                          line {i.line}: {i.raw} — {i.reason}
+                          linha {i.line}: {i.raw} · {i.reason}
                         </li>
                       ))}
                     </ul>
@@ -123,19 +124,19 @@ export default function BatchesPage() {
         {q.isLoading ? (
           <Loading />
         ) : rows.length === 0 ? (
-          <Empty label="No batches yet." />
+          <Empty label="Nenhum lote ainda." />
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Batch</th>
-                <th>Source</th>
+                <th>Lote</th>
+                <th>Fonte</th>
                 <th>Status</th>
-                <th>Detected</th>
-                <th>Published</th>
-                <th>Domains</th>
-                <th>New</th>
-                <th>Invalid</th>
+                <th>Detectado em</th>
+                <th>Publicado em</th>
+                <th>Domínios</th>
+                <th>Novos</th>
+                <th>Inválidos</th>
                 <th>SHA-256</th>
               </tr>
             </thead>
@@ -150,18 +151,9 @@ export default function BatchesPage() {
                       {b.name ?? b.id.slice(0, 8)}
                     </Link>
                   </td>
-                  <td className="text-xs">{b.sourceKey}</td>
+                  <td className="text-xs">{label(b.sourceKey)}</td>
                   <td>
-                    <Badge
-                      value={b.status}
-                      tone={
-                        b.status === "failed"
-                          ? "bg-rose-100 text-rose-800"
-                          : b.status === "analyzing"
-                            ? "bg-sky-100 text-sky-800"
-                            : "bg-emerald-100 text-emerald-800"
-                      }
-                    />
+                    <Badge value={b.status} />
                   </td>
                   <td className="text-xs">{fmtDate(b.detectedAt)}</td>
                   <td className="text-xs">{fmtDate(b.publishedAt)}</td>
@@ -178,7 +170,7 @@ export default function BatchesPage() {
         )}
         {q.hasNextPage && (
           <div className="mt-3 text-center">
-            <Button onClick={() => q.fetchNextPage()}>Load more</Button>
+            <Button onClick={() => q.fetchNextPage()}>Carregar mais</Button>
           </div>
         )}
       </Card>

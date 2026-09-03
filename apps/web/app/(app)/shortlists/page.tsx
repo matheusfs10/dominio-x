@@ -36,6 +36,7 @@ export default function ShortlistsPage() {
     <div>
       <PageHeader
         title="Shortlists"
+        subtitle="Listas curtas de domínios selecionados pelos analistas."
         actions={
           isAnalyst && (
             <form
@@ -46,14 +47,14 @@ export default function ShortlistsPage() {
               }}
             >
               <Input
-                placeholder="new shortlist name"
+                placeholder="nome da nova shortlist"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-56"
                 name="shortlist-name"
               />
               <Button type="submit" variant="primary">
-                Create
+                Criar
               </Button>
             </form>
           )
@@ -64,15 +65,15 @@ export default function ShortlistsPage() {
         {q.isLoading ? (
           <Loading />
         ) : !q.data?.items.length ? (
-          <Empty label="No shortlists yet." />
+          <Empty label="Nenhuma shortlist ainda." />
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Name</th>
+                <th>Nome</th>
                 <th>Status</th>
-                <th>Domains</th>
-                <th>Updated</th>
+                <th>Domínios</th>
+                <th>Atualizada em</th>
                 <th></th>
               </tr>
             </thead>
@@ -89,7 +90,7 @@ export default function ShortlistsPage() {
                     <div className="text-xs text-neutral-500">{s.description}</div>
                   </td>
                   <td>
-                    <Badge value={s.status} tone="bg-neutral-200 text-neutral-700" />
+                    <Badge value={s.status} />
                   </td>
                   <td>{s.domainCount}</td>
                   <td className="text-xs">{fmtDate(s.updatedAt)}</td>

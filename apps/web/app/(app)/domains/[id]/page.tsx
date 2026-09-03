@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { fmtDate, fmtScore, scoreTone } from "@/lib/format";
+import { fmtDate, fmtScore, label, scoreTone } from "@/lib/format";
 import { useRole } from "@/components/shell";
 import {
   Badge,
@@ -145,10 +145,10 @@ interface ProviderReq {
 }
 
 function obsValue(o: Observation): string {
-  if (o.purgedAt) return "(purged by retention)";
+  if (o.purgedAt) return "(removido pela retenção)";
   if (o.state !== "measured") return "";
   if (o.valueType === "numeric") return String(o.valueNumeric);
-  if (o.valueType === "boolean") return String(o.valueBoolean);
+  if (o.valueType === "boolean") return o.valueBoolean ? "sim" : "não";
   if (o.valueType === "text") return o.valueText ?? "";
   return JSON.stringify(o.valueJson);
 }
@@ -219,15 +219,15 @@ export default function DomainDetailPage() {
   const latestRun = d.runs[0];
   const dims: [string, number | null | undefined, boolean?][] = s
     ? [
-        ["Name", s.nameScore],
-        ["Brand", s.brandScore],
+        ["Nome", s.nameScore],
+        ["Marca", s.brandScore],
         ["SEO", s.seoScore],
-        ["Link", s.linkScore],
-        ["History", s.historyScore],
-        ["Commercial", s.commercialScore],
-        ["Risk", s.riskScore, true],
-        ["Acquisition", s.acquisitionScore],
-        ["Confidence", s.confidenceScore],
+        ["Links", s.linkScore],
+        ["Histórico", s.historyScore],
+        ["Comercial", s.commercialScore],
+        ["Risco", s.riskScore, true],
+        ["Aquisição", s.acquisitionScore],
+        ["Confiança", s.confidenceScore],
       ]
     : [];
   const mutationError =
@@ -242,22 +242,23 @@ export default function DomainDetailPage() {
             {d.domain.asciiFqdn !== d.domain.unicodeFqdn && (
               <span className="font-mono">{d.domain.asciiFqdn} · </span>
             )}
-            registrable {d.domain.registrableDomain} · first seen {fmtDate(d.domain.firstSeenAt)} ·
-            sources {d.summary?.sourceKeys.join(", ") || "—"}
+            registrável {d.domain.registrableDomain} · visto pela primeira vez em{" "}
+            {fmtDate(d.domain.firstSeenAt)} · fontes{" "}
+            {d.summary?.sourceKeys.map(label).join(", ") || "—"}
           </span>
         }
         actions={
           isAnalyst && (
             <>
               <Button onClick={() => analyze.mutate(false)} disabled={analyze.isPending}>
-                Reanalyze
+                Reanalisar
               </Button>
               <Button
                 variant="primary"
                 onClick={() => analyze.mutate(true)}
                 disabled={analyze.isPending}
               >
-                Force deep analysis
+                Forçar análise profunda
               </Button>
             </>
           )
@@ -266,16 +267,16 @@ export default function DomainDetailPage() {
       <ErrorBox error={mutationError} />
       <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
         <span className={`rounded px-2 py-1 text-lg font-semibold ${scoreTone(s?.overallScore)}`}>
-          Overall {fmtScore(s?.overallScore)}
+          Geral {fmtScore(s?.overallScore)}
         </span>
         <span className={`rounded px-2 py-1 ${scoreTone(s?.confidenceScore)}`}>
-          Confidence {fmtScore(s?.confidenceScore)}
+          Confiança {fmtScore(s?.confidenceScore)}
         </span>
         <span>
           Status <Badge value={d.summary?.latestRunStatus} />
         </span>
         <span>
-          Disposition <Badge value={d.summary?.disposition} />
+          Disposição <Badge value={d.summary?.disposition} />
         </span>
         <span>
           Manual <Badge value={d.summary?.manualDisposition} tone="bg-violet-100 text-violet-800" />
@@ -285,8 +286,8 @@ export default function DomainDetailPage() {
           {d.summary?.candidateGatePassed === null || d.summary?.candidateGatePassed === undefined
             ? "—"
             : d.summary.candidateGatePassed
-              ? "passed"
-              : "denied"}
+              ? "aprovado"
+              : "negado"}
         </span>
         <span className="flex flex-wrap gap-1">
           {d.tags.map((t) => (
@@ -295,6 +296,7 @@ export default function DomainDetailPage() {
               {isAnalyst && t.source === "manual" && (
                 <button
                   className="ml-1 text-neutral-500 hover:text-rose-600"
+                  title="remover tag"
                   onClick={() => removeTag.mutate(t.key)}
                 >
                   ×
@@ -308,19 +310,19 @@ export default function DomainDetailPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Card
-            title={`Score cards${s ? ` · model v${s.scoreModelVersion} · ${fmtDate(s.createdAt)}` : ""}`}
+            title={`Notas por dimensão${s ? ` · modelo v${s.scoreModelVersion} · ${fmtDate(s.createdAt)}` : ""}`}
           >
             {!s ? (
-              <Empty label="No score yet. The analysis is queued or running." />
+              <Empty label="Ainda sem nota. A análise está na fila ou em execução." />
             ) : (
               <div className="grid grid-cols-3 gap-2 md:grid-cols-5">
-                {dims.map(([label, value, invert]) => (
-                  <div key={label} className="rounded border border-neutral-200 p-2">
-                    <div className="text-xs text-neutral-500">{label}</div>
+                {dims.map(([dim, value, invert]) => (
+                  <div key={dim} className="rounded border border-neutral-200 p-2">
+                    <div className="text-xs text-neutral-500">{dim}</div>
                     <div
                       className={`text-lg font-semibold ${value === null || value === undefined ? "text-neutral-400" : ""}`}
                     >
-                      {value === null || value === undefined ? "n/a" : Math.round(value)}
+                      {value === null || value === undefined ? "n/d" : Math.round(value)}
                     </div>
                     <ScoreBar value={value} invert={invert} />
                   </div>
@@ -328,13 +330,13 @@ export default function DomainDetailPage() {
               </div>
             )}
           </Card>
-          <Card title="Why this score?">
+          <Card title="Por que essa nota?">
             {!s ? (
               <Empty />
             ) : (
               <div className="grid gap-4 md:grid-cols-3 text-sm">
                 <div>
-                  <h3 className="mb-1 font-medium text-emerald-700">Positive</h3>
+                  <h3 className="mb-1 font-medium text-emerald-700">Pontos positivos</h3>
                   <ul className="space-y-1">
                     {s.explanationJson.positive.map((p, i) => (
                       <li key={i}>
@@ -346,7 +348,7 @@ export default function DomainDetailPage() {
                   </ul>
                 </div>
                 <div>
-                  <h3 className="mb-1 font-medium text-rose-700">Negative</h3>
+                  <h3 className="mb-1 font-medium text-rose-700">Pontos negativos</h3>
                   <ul className="space-y-1">
                     {s.explanationJson.negative.map((p, i) => (
                       <li key={i}>
@@ -358,7 +360,7 @@ export default function DomainDetailPage() {
                   </ul>
                 </div>
                 <div>
-                  <h3 className="mb-1 font-medium text-neutral-600">Missing</h3>
+                  <h3 className="mb-1 font-medium text-neutral-600">Sem evidência</h3>
                   <ul className="space-y-1">
                     {s.explanationJson.missing.map((p, i) => (
                       <li key={i}>
@@ -367,12 +369,12 @@ export default function DomainDetailPage() {
                       </li>
                     ))}
                   </ul>
-                  <h3 className="mb-1 mt-3 font-medium text-neutral-600">Confidence factors</h3>
+                  <h3 className="mb-1 mt-3 font-medium text-neutral-600">Fatores de confiança</h3>
                   <ul className="space-y-1">
                     {s.explanationJson.confidenceFactors.map((f, i) => (
                       <li key={i} className="text-xs">
                         <span className="font-mono">{f.factor}</span> {f.impact >= 0 ? "+" : ""}
-                        {f.impact} — {f.detail}
+                        {f.impact} · {f.detail}
                       </li>
                     ))}
                   </ul>
@@ -380,7 +382,7 @@ export default function DomainDetailPage() {
               </div>
             )}
           </Card>
-          <Card title="Observations (latest first)">
+          <Card title="Observações (mais recentes primeiro)">
             {observations.isLoading ? (
               <Loading />
             ) : (
@@ -388,13 +390,13 @@ export default function DomainDetailPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Metric</th>
-                      <th>Value</th>
-                      <th>Provider</th>
-                      <th>State</th>
-                      <th>Observed</th>
-                      <th>Expires</th>
-                      <th>Run</th>
+                      <th>Métrica</th>
+                      <th>Valor</th>
+                      <th>Provedor</th>
+                      <th>Estado</th>
+                      <th>Observado em</th>
+                      <th>Expira em</th>
+                      <th>Análise</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -416,7 +418,7 @@ export default function DomainDetailPage() {
                           />
                         </td>
                         <td className="text-xs">{fmtDate(o.observedAt)}</td>
-                        <td className="text-xs">{o.expiresAt ? fmtDate(o.expiresAt) : "never"}</td>
+                        <td className="text-xs">{o.expiresAt ? fmtDate(o.expiresAt) : "nunca"}</td>
                         <td className="font-mono text-[10px] text-neutral-400">
                           {o.analysisRunId?.slice(0, 8)}
                         </td>
@@ -427,7 +429,7 @@ export default function DomainDetailPage() {
               </div>
             )}
           </Card>
-          <Card title="Rules (latest run)">
+          <Card title="Regras (última análise)">
             {rules.isLoading ? (
               <Loading />
             ) : (
@@ -444,16 +446,16 @@ export default function DomainDetailPage() {
                 const lastRunId = items[items.length - 1]?.analysisRunId;
                 const latest = items.filter((r) => r.analysisRunId === lastRunId);
                 return latest.length === 0 ? (
-                  <Empty label="No rule executions yet." />
+                  <Empty label="Nenhuma regra executada ainda." />
                 ) : (
                   <table>
                     <thead>
                       <tr>
-                        <th>Rule</th>
-                        <th>Matched</th>
-                        <th>Action</th>
-                        <th>Reason</th>
-                        <th>Evidence</th>
+                        <th>Regra</th>
+                        <th>Ativou</th>
+                        <th>Ação</th>
+                        <th>Motivo</th>
+                        <th>Evidência</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -463,14 +465,14 @@ export default function DomainDetailPage() {
                             {r.ruleKey}{" "}
                             <span className="text-neutral-400">v{r.rulesetVersion}</span>
                           </td>
-                          <td>{r.matched ? "yes" : "no"}</td>
+                          <td>{r.matched ? "sim" : "não"}</td>
                           <td>{r.action ?? "—"}</td>
                           <td className="font-mono text-xs">{r.reasonCode}</td>
                           <td className="text-xs text-neutral-500">
                             {r.evidenceJson.leaves.map((l, i) => (
                               <div key={i}>
                                 {l.metric} {l.op} {JSON.stringify(l.expected)} →{" "}
-                                {l.state === "measured" ? JSON.stringify(l.actual) : l.state}{" "}
+                                {l.state === "measured" ? JSON.stringify(l.actual) : label(l.state)}{" "}
                                 {l.matched ? "✓" : "✗"}
                               </div>
                             ))}
@@ -486,17 +488,15 @@ export default function DomainDetailPage() {
         </div>
         <div className="space-y-4">
           {isAnalyst && (
-            <Card title="Analyst actions">
+            <Card title="Ações do analista">
               <div className="space-y-3 text-sm">
                 <div>
-                  <div className="mb-1 text-xs font-medium text-neutral-600">
-                    Manual disposition
-                  </div>
+                  <div className="mb-1 text-xs font-medium text-neutral-600">Disposição manual</div>
                   <Select
                     defaultValue={d.summary?.manualDisposition ?? ""}
                     onChange={(e) => setDisposition.mutate(e.target.value)}
                   >
-                    <option value="">— none —</option>
+                    <option value="">— nenhuma —</option>
                     {[
                       "interesting",
                       "rejected",
@@ -505,7 +505,7 @@ export default function DomainDetailPage() {
                       "acquired",
                     ].map((v) => (
                       <option key={v} value={v}>
-                        {v}
+                        {label(v)}
                       </option>
                     ))}
                   </Select>
@@ -521,12 +521,12 @@ export default function DomainDetailPage() {
                   }}
                 >
                   <Input
-                    placeholder="add tag"
+                    placeholder="nova tag"
                     value={tag}
                     onChange={(e) => setTag(e.target.value)}
                   />
                   <Button type="submit" size="sm">
-                    Tag
+                    Marcar
                   </Button>
                 </form>
                 <form
@@ -537,7 +537,7 @@ export default function DomainDetailPage() {
                   }}
                 >
                   <Select value={shortlistId} onChange={(e) => setShortlistId(e.target.value)}>
-                    <option value="">add to shortlist…</option>
+                    <option value="">adicionar à shortlist…</option>
                     {shortlists.data?.items
                       .filter((l) => l.status === "open")
                       .map((l) => (
@@ -547,7 +547,7 @@ export default function DomainDetailPage() {
                       ))}
                   </Select>
                   <Button type="submit" size="sm" disabled={!shortlistId}>
-                    Add
+                    Adicionar
                   </Button>
                 </form>
                 <form
@@ -561,18 +561,18 @@ export default function DomainDetailPage() {
                 >
                   <Textarea
                     rows={3}
-                    placeholder="note…"
+                    placeholder="anotação…"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                   />
                   <Button type="submit" size="sm" className="mt-1">
-                    Add note
+                    Salvar anotação
                   </Button>
                 </form>
               </div>
             </Card>
           )}
-          <Card title="Analysis history">
+          <Card title="Histórico de análises">
             <ul className="space-y-2 text-sm">
               {d.runs.map((r) => (
                 <li key={r.id} className="rounded border border-neutral-200 p-2">
@@ -581,13 +581,13 @@ export default function DomainDetailPage() {
                     <span className="text-xs text-neutral-500">{fmtDate(r.createdAt)}</span>
                   </div>
                   <div className="mt-1 text-xs text-neutral-600">
-                    {r.triggerType}
-                    {r.forceDeep ? " · deep" : ""}
+                    {label(r.triggerType)}
+                    {r.forceDeep ? " · profunda" : ""}
                     {r.errorCode ? ` · ${r.errorCode}` : ""}
                   </div>
                   {r.summaryJson.candidateGateReasons && (
                     <div className="text-[11px] text-neutral-500">
-                      gate: {r.summaryJson.candidateGatePassed ? "passed" : "denied"} —{" "}
+                      gate: {r.summaryJson.candidateGatePassed ? "aprovado" : "negado"} ·{" "}
                       {r.summaryJson.candidateGateReasons.join("; ")}
                     </div>
                   )}
@@ -595,7 +595,7 @@ export default function DomainDetailPage() {
                     className="text-xs text-sky-700 hover:underline"
                     href={`/queue?run=${r.id}`}
                   >
-                    details
+                    detalhes
                   </Link>
                 </li>
               ))}
@@ -603,7 +603,7 @@ export default function DomainDetailPage() {
           </Card>
           <Card title="Shortlists">
             {d.shortlists.length === 0 ? (
-              <Empty label="Not shortlisted." />
+              <Empty label="Não está em nenhuma shortlist." />
             ) : (
               <ul className="text-sm">
                 {d.shortlists.map((l) => (
@@ -611,17 +611,18 @@ export default function DomainDetailPage() {
                     <Link className="text-sky-700 hover:underline" href={`/shortlists/${l.id}`}>
                       {l.name}
                     </Link>
-                    {l.note && <span className="text-neutral-500"> — {l.note}</span>}
+                    {l.note && <span className="text-neutral-500"> · {l.note}</span>}
                   </li>
                 ))}
               </ul>
             )}
           </Card>
-          <Card title="Notes & dispositions">
+          <Card title="Anotações e disposições">
             <ul className="space-y-1 text-sm">
               {d.dispositions.map((x) => (
                 <li key={x.id} className="text-xs text-neutral-600">
-                  {fmtDate(x.createdAt)} · disposition → <b>{x.disposition ?? "cleared"}</b>
+                  {fmtDate(x.createdAt)} · disposição →{" "}
+                  <b>{x.disposition ? label(x.disposition) : "removida"}</b>
                   {x.note ? ` (${x.note})` : ""}
                 </li>
               ))}
@@ -631,33 +632,36 @@ export default function DomainDetailPage() {
                   {n.body}
                 </li>
               ))}
-              {d.notes.length === 0 && d.dispositions.length === 0 && <Empty label="No notes." />}
+              {d.notes.length === 0 && d.dispositions.length === 0 && (
+                <Empty label="Nenhuma anotação." />
+              )}
             </ul>
           </Card>
-          <Card title="Source history">
+          <Card title="Histórico de fontes">
             <ul className="space-y-1 text-xs">
               {d.sourceHistory.map((h) => (
                 <li key={h.batchId}>
                   <Link className="text-sky-700 hover:underline" href={`/batches/${h.batchId}`}>
-                    {h.sourceKey}
+                    {label(h.sourceKey)}
                   </Link>{" "}
-                  · {fmtDate(h.detectedAt)} · raw <span className="font-mono">{h.rawValue}</span>
-                  {h.isNew && " · new"}
+                  · {fmtDate(h.detectedAt)} · original{" "}
+                  <span className="font-mono">{h.rawValue}</span>
+                  {h.isNew && " · novo"}
                 </li>
               ))}
             </ul>
           </Card>
-          <Card title="Provider history">
+          <Card title="Histórico de provedores">
             {providerReqs.data?.items.length ? (
               <table>
                 <thead>
                   <tr>
-                    <th>Provider</th>
+                    <th>Provedor</th>
                     <th>Endpoint</th>
                     <th>Status</th>
                     <th>ms</th>
-                    <th>Units</th>
-                    <th>At</th>
+                    <th>Unidades</th>
+                    <th>Quando</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -674,10 +678,10 @@ export default function DomainDetailPage() {
                 </tbody>
               </table>
             ) : (
-              <Empty label="No provider requests." />
+              <Empty label="Nenhuma requisição a provedores." />
             )}
           </Card>
-          <Card title="Identity">
+          <Card title="Identidade">
             <KeyValue
               items={[
                 [
@@ -688,7 +692,7 @@ export default function DomainDetailPage() {
                 ],
                 ["sld", d.domain.sld],
                 ["tld", d.domain.tld],
-                ["last seen", fmtDate(d.domain.lastSeenAt)],
+                ["visto por último", fmtDate(d.domain.lastSeenAt)],
               ]}
             />
           </Card>

@@ -8,7 +8,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
-import { STATUS_TONE } from "@/lib/format";
+import { STATUS_TONE, label } from "@/lib/format";
 
 export function Button({
   variant = "default",
@@ -118,6 +118,7 @@ export function Card({
   );
 }
 
+/** Exibe um valor enumerado com rótulo em pt-BR e cor por estado. */
 export function Badge({
   value,
   tone,
@@ -136,7 +137,7 @@ export function Badge({
         className,
       )}
     >
-      {value.replace(/_/g, " ")}
+      {label(value)}
     </span>
   );
 }
@@ -194,11 +195,11 @@ export function ErrorBox({ error }: { error: unknown }) {
   );
 }
 
-export function Loading({ label = "Loading…" }: { label?: string }) {
+export function Loading({ label = "Carregando…" }: { label?: string }) {
   return <div className="py-6 text-center text-sm text-neutral-500">{label}</div>;
 }
 
-export function Empty({ label = "Nothing here yet." }: { label?: string }) {
+export function Empty({ label = "Nada por aqui ainda." }: { label?: string }) {
   return <div className="py-6 text-center text-sm text-neutral-400">{label}</div>;
 }
 
@@ -210,7 +211,7 @@ export function ScoreBar({
   invert?: boolean;
 }) {
   if (value === null || value === undefined)
-    return <span className="text-xs text-neutral-400">n/a</span>;
+    return <span className="text-xs text-neutral-400">n/d</span>;
   const v = invert ? 100 - value : value;
   const color = v >= 70 ? "bg-emerald-500" : v >= 40 ? "bg-amber-500" : "bg-rose-500";
   return (

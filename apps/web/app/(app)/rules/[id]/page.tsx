@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { label } from "@/lib/format";
 import { useRole } from "@/components/shell";
 import {
   Badge,
@@ -135,16 +136,16 @@ export default function RulesetPage() {
         }
         actions={
           <>
-            {isAnalyst && <Button onClick={() => clone.mutate()}>Clone to draft</Button>}
-            {editable && <Button onClick={() => validate.mutate()}>Validate</Button>}
+            {isAnalyst && <Button onClick={() => clone.mutate()}>Clonar para rascunho</Button>}
+            {editable && <Button onClick={() => validate.mutate()}>Validar</Button>}
             {editable && (
               <Button onClick={() => save.mutate()} disabled={save.isPending}>
-                Save draft
+                Salvar rascunho
               </Button>
             )}
             {isAdmin && rs.status === "draft" && (
               <Button variant="primary" onClick={() => activate.mutate()}>
-                Activate
+                Ativar
               </Button>
             )}
           </>
@@ -156,7 +157,7 @@ export default function RulesetPage() {
       {issues &&
         (issues.length === 0 ? (
           <div className="mb-3 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            Ruleset is valid.
+            Conjunto de regras válido.
           </div>
         ) : (
           <div className="mb-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -170,14 +171,14 @@ export default function RulesetPage() {
           </div>
         ))}
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card title="Definition" className="lg:col-span-2">
+        <Card title="Definição" className="lg:col-span-2">
           <div className="mb-2 grid gap-2 md:grid-cols-2">
             <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!editable} />
             <Input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={!editable}
-              placeholder="description"
+              placeholder="descrição"
             />
           </div>
           <Textarea
@@ -187,19 +188,20 @@ export default function RulesetPage() {
             readOnly={!editable}
           />
           <p className="mt-2 text-xs text-neutral-500">
-            JSON array of rules. Condition: {"{ metric, op, value }"} or{" "}
-            {"{ all: [...] } / { any: [...] } / { not: ... }"}. Regexes use RE2 (no backtracking).
+            Lista JSON de regras. Condição: {"{ metric, op, value }"} ou{" "}
+            {"{ all: [...] } / { any: [...] } / { not: ... }"}. Expressões regulares usam RE2 (sem
+            backtracking).
           </p>
         </Card>
-        <Card title="Test against domains">
+        <Card title="Testar contra domínios">
           <Textarea
             rows={4}
-            placeholder="domain ids (uuid), comma or newline separated"
+            placeholder="ids de domínio (uuid), separados por vírgula ou quebra de linha"
             value={testIds}
             onChange={(e) => setTestIds(e.target.value)}
           />
           <Button className="mt-2" onClick={() => test.mutate()} disabled={!testIds.trim()}>
-            Run test (dry-run)
+            Executar teste (simulação)
           </Button>
           {test.data && (
             <ul className="mt-3 space-y-2 text-sm">
@@ -209,17 +211,17 @@ export default function RulesetPage() {
                     {r.asciiFqdn} → <Badge value={r.evaluation.summary.disposition} />{" "}
                     {r.evaluation.summary.candidateDecision && (
                       <span className="text-xs">
-                        candidate {r.evaluation.summary.candidateDecision}
+                        candidato {label(r.evaluation.summary.candidateDecision)}
                       </span>
                     )}
                   </div>
                   <div className="text-xs text-neutral-500">
-                    matched:{" "}
+                    ativadas:{" "}
                     {r.evaluation.executions
                       .filter((e) => e.matched)
                       .map((e) => e.ruleKey)
-                      .join(", ") || "none"}{" "}
-                    · adjustments {JSON.stringify(r.evaluation.summary.scoreAdjustments)} · tags{" "}
+                      .join(", ") || "nenhuma"}{" "}
+                    · ajustes {JSON.stringify(r.evaluation.summary.scoreAdjustments)} · tags{" "}
                     {r.evaluation.summary.tags.join(", ") || "—"}
                   </div>
                 </li>

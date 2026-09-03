@@ -35,10 +35,10 @@ function LoginForm() {
     >
       <div>
         <h1 className="text-lg font-semibold">Dominio-X</h1>
-        <p className="text-sm text-neutral-500">Internal access. Sign in to continue.</p>
+        <p className="text-sm text-neutral-500">Acesso interno. Entre para continuar.</p>
       </div>
       <div>
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">E-mail</Label>
         <Input
           id="email"
           type="email"
@@ -50,7 +50,7 @@ function LoginForm() {
         />
       </div>
       <div>
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">Senha</Label>
         <Input
           id="password"
           type="password"
@@ -63,7 +63,7 @@ function LoginForm() {
       </div>
       <ErrorBox error={error} />
       <Button type="submit" variant="primary" disabled={busy} className="w-full">
-        {busy ? "Signing in…" : "Sign in"}
+        {busy ? "Entrando…" : "Entrar"}
       </Button>
     </form>
   );

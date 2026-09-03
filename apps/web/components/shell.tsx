@@ -7,19 +7,20 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import type { UserSummary } from "@dominio-x/contracts";
 import { api } from "@/lib/api";
+import { label } from "@/lib/format";
 import { Button } from "./ui";
 
 const NAV: { href: string; label: string }[] = [
-  { href: "/", label: "Overview" },
-  { href: "/domains", label: "Domains" },
-  { href: "/batches", label: "Release Batches" },
-  { href: "/queue", label: "Analysis Queue" },
+  { href: "/", label: "Visão geral" },
+  { href: "/domains", label: "Domínios" },
+  { href: "/batches", label: "Lotes de liberação" },
+  { href: "/queue", label: "Fila de análise" },
   { href: "/shortlists", label: "Shortlists" },
-  { href: "/rules", label: "Rules" },
-  { href: "/providers", label: "Providers" },
-  { href: "/usage", label: "Usage & Costs" },
-  { href: "/audit", label: "Audit" },
-  { href: "/settings", label: "Settings" },
+  { href: "/rules", label: "Regras" },
+  { href: "/providers", label: "Provedores" },
+  { href: "/usage", label: "Uso e custos" },
+  { href: "/audit", label: "Auditoria" },
+  { href: "/settings", label: "Configurações" },
 ];
 
 export function useMe() {
@@ -37,7 +38,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const me = useMe();
 
-  if (me.isLoading) return <div className="p-8 text-sm text-neutral-500">Loading session…</div>;
+  if (me.isLoading) return <div className="p-8 text-sm text-neutral-500">Carregando sessão…</div>;
   if (me.isError || !me.data) {
     if (typeof window !== "undefined")
       router.replace(`/login?next=${encodeURIComponent(pathname)}`);
@@ -52,7 +53,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <Link href="/" className="text-base font-bold tracking-tight text-neutral-900">
             Dominio-X
           </Link>
-          <div className="text-[11px] text-neutral-500">domain intelligence</div>
+          <div className="text-[11px] text-neutral-500">inteligência de domínios</div>
         </div>
         <nav className="flex-1 space-y-0.5 p-2">
           {NAV.map((item) => {
@@ -75,7 +76,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </nav>
         <div className="border-t border-neutral-200 p-3 text-xs text-neutral-600">
           <div className="truncate font-medium text-neutral-800">{user.email}</div>
-          <div className="mb-2 capitalize">{user.role}</div>
+          <div className="mb-2">{label(user.role)}</div>
           <Button
             size="sm"
             onClick={async () => {
@@ -84,7 +85,7 @@ export function Shell({ children }: { children: ReactNode }) {
               router.replace("/login");
             }}
           >
-            Sign out
+            Sair
           </Button>
         </div>
       </aside>

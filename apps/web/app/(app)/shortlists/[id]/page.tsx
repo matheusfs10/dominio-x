@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { fmtDate, fmtScore } from "@/lib/format";
+import { fmtDate, fmtScore, label } from "@/lib/format";
 import { useRole } from "@/components/shell";
 import {
   Badge,
@@ -70,13 +70,13 @@ export default function ShortlistDetailPage() {
               >
                 {["open", "closed", "archived"].map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {label(s)}
                   </option>
                 ))}
               </Select>
             )}
             <a href={`/api/v1/shortlists/${id}/export.csv`}>
-              <Button>Export CSV</Button>
+              <Button>Exportar CSV</Button>
             </a>
           </>
         }
@@ -84,19 +84,19 @@ export default function ShortlistDetailPage() {
       <ErrorBox error={remove.error ?? setStatus.error} />
       <Card>
         {d.domains.length === 0 ? (
-          <Empty label="No domains in this shortlist. Add them from a domain page." />
+          <Empty label="Nenhum domínio nesta shortlist. Adicione a partir da página de um domínio." />
         ) : (
           <table>
             <thead>
               <tr>
                 <th>#</th>
-                <th>Domain</th>
-                <th>Overall</th>
+                <th>Domínio</th>
+                <th>Geral</th>
                 <th>Conf.</th>
-                <th>Risk</th>
-                <th>Disposition</th>
-                <th>Note</th>
-                <th>Added</th>
+                <th>Risco</th>
+                <th>Disposição</th>
+                <th>Observação</th>
+                <th>Adicionado em</th>
                 <th></th>
               </tr>
             </thead>
@@ -127,7 +127,7 @@ export default function ShortlistDetailPage() {
                   <td>
                     {isAnalyst && (
                       <Button size="sm" variant="ghost" onClick={() => remove.mutate(r.domainId)}>
-                        remove
+                        remover
                       </Button>
                     )}
                   </td>

@@ -30,6 +30,13 @@ interface Provider {
   };
 }
 
+const RETENTION_LABELS: Record<string, string> = {
+  internal: "interno",
+  public_source: "fonte pública",
+  provider_restricted: "restrito ao provedor",
+  provider_contractual: "contratual",
+};
+
 export default function ProvidersPage() {
   const qc = useQueryClient();
   const { isAdmin } = useRole();
@@ -50,8 +57,8 @@ export default function ProvidersPage() {
   return (
     <div>
       <PageHeader
-        title="Providers"
-        subtitle="Adapters are configured through environment variables; keys are never shown here. Operational limits live in the registry."
+        title="Provedores"
+        subtitle="Os adaptadores são configurados por variáveis de ambiente; chaves nunca aparecem aqui. Os limites operacionais ficam no registro."
       />
       <ErrorBox error={toggle.error ?? setBudget.error} />
       <Card>
@@ -61,19 +68,19 @@ export default function ProvidersPage() {
           <table>
             <thead>
               <tr>
-                <th>Provider</th>
-                <th>Runtime</th>
-                <th>Enabled</th>
-                <th>Paid</th>
-                <th>Capabilities</th>
-                <th>Rate / conc.</th>
+                <th>Provedor</th>
+                <th>Estado</th>
+                <th>Ativo</th>
+                <th>Pago</th>
+                <th>Capacidades</th>
+                <th>Taxa / conc.</th>
                 <th>Timeout</th>
                 <th>TTL</th>
-                <th>Retention</th>
-                <th>24h req / fail</th>
-                <th>Last success</th>
-                <th>30d units / cost</th>
-                <th>Budget</th>
+                <th>Retenção</th>
+                <th>24 h req. / falhas</th>
+                <th>Último sucesso</th>
+                <th>30 d unidades / custo</th>
+                <th>Orçamento</th>
               </tr>
             </thead>
             <tbody>
@@ -90,30 +97,32 @@ export default function ProvidersPage() {
                   <td>
                     {isAdmin ? (
                       <Button size="sm" onClick={() => toggle.mutate(p)}>
-                        {p.enabled ? "on" : "off"}
+                        {p.enabled ? "ligado" : "desligado"}
                       </Button>
                     ) : p.enabled ? (
-                      "on"
+                      "ligado"
                     ) : (
-                      "off"
+                      "desligado"
                     )}
                   </td>
-                  <td>{p.paid ? "yes" : "no"}</td>
+                  <td>{p.paid ? "sim" : "não"}</td>
                   <td className="text-xs">{p.capabilities.join(", ")}</td>
                   <td className="text-xs">
-                    {p.rateLimitRps} rps / {p.concurrencyLimit}
+                    {p.rateLimitRps} req/s / {p.concurrencyLimit}
                   </td>
                   <td className="text-xs">{p.timeoutMs} ms</td>
                   <td className="text-xs">
-                    {p.defaultTtlHours ? `${p.defaultTtlHours} h` : "none"}
+                    {p.defaultTtlHours ? `${p.defaultTtlHours} h` : "sem expiração"}
                   </td>
-                  <td className="text-xs">{p.retentionPolicy}</td>
+                  <td className="text-xs">
+                    {RETENTION_LABELS[p.retentionPolicy] ?? p.retentionPolicy}
+                  </td>
                   <td className="text-xs">
                     {fmtNumber(p.stats.requests24h)} / {fmtPercent(p.stats.failureRate24h)}
                   </td>
                   <td className="text-xs">{fmtDate(p.stats.lastSuccessAt)}</td>
                   <td className="text-xs">
-                    {fmtNumber(p.stats.units30d)} / ${fmtNumber(p.stats.costUsd30d, 2)}
+                    {fmtNumber(p.stats.units30d)} / US$ {fmtNumber(p.stats.costUsd30d, 2)}
                   </td>
                   <td className="text-xs">
                     {p.paid ? (
@@ -132,10 +141,10 @@ export default function ProvidersPage() {
                             name="budget"
                             defaultValue={p.monthlyUnitBudget ?? ""}
                             className="w-20 rounded border border-neutral-300 px-1 text-xs"
-                            placeholder="units/mo"
+                            placeholder="unid./mês"
                           />
                           <Button size="sm" type="submit">
-                            set
+                            definir
                           </Button>
                         </form>
                       ) : (

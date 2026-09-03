@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "@/lib/api";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, label } from "@/lib/format";
 import { useRole } from "@/components/shell";
 import {
   Button,
@@ -43,6 +43,8 @@ interface User {
   active: boolean;
   lastLoginAt: string | null;
 }
+
+const ROLES = ["viewer", "analyst", "admin"] as const;
 
 export default function SettingsPage() {
   const qc = useQueryClient();
@@ -108,7 +110,7 @@ export default function SettingsPage() {
   if (settings.isLoading || !gate) return <Loading />;
   return (
     <div>
-      <PageHeader title="Settings" />
+      <PageHeader title="Configurações" />
       <ErrorBox
         error={
           saveGate.error ?? addBl.error ?? removeBl.error ?? createUser.error ?? updateUser.error
@@ -116,18 +118,19 @@ export default function SettingsPage() {
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card
-          title="Candidate gate (paid-provider funnel)"
+          title="Gate de candidatos (funil dos provedores pagos)"
           actions={
             isAdmin && (
               <Button variant="primary" size="sm" onClick={() => saveGate.mutate()}>
-                Save
+                Salvar
               </Button>
             )
           }
         >
           <p className="mb-3 text-xs text-neutral-500">
-            Paid enrichment runs only for domains that pass this gate (or are forced by an analyst).
-            Rule actions candidate_allow / candidate_deny take precedence over thresholds.
+            O enriquecimento pago só roda para domínios que passam neste gate (ou forçados por um
+            analista). As ações de regra candidate_allow / candidate_deny têm precedência sobre os
+            limites abaixo.
           </p>
           <div className="grid grid-cols-2 gap-3 text-sm">
             <label className="col-span-2 flex items-center gap-2">
@@ -137,10 +140,10 @@ export default function SettingsPage() {
                 disabled={!isAdmin}
                 onChange={(e) => setGate({ ...gate, enabled: e.target.checked })}
               />{" "}
-              gate enabled (when disabled every domain is a paid candidate)
+              gate ativo (desligado, todo domínio vira candidato pago)
             </label>
             <div>
-              <Label>Max SLD length</Label>
+              <Label>Tamanho máximo do SLD</Label>
               <Input
                 type="number"
                 value={gate.maxSldLength}
@@ -149,7 +152,7 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <Label>Max digits</Label>
+              <Label>Máx. de dígitos</Label>
               <Input
                 type="number"
                 value={gate.maxDigits}
@@ -158,7 +161,7 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <Label>Max hyphens</Label>
+              <Label>Máx. de hífens</Label>
               <Input
                 type="number"
                 value={gate.maxHyphens}
@@ -167,7 +170,7 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <Label>Max randomness (0–1)</Label>
+              <Label>Aleatoriedade máxima (0–1)</Label>
               <Input
                 type="number"
                 step="0.05"
@@ -179,7 +182,7 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <Label>Max deep analyses per batch (blank = unlimited)</Label>
+              <Label>Máx. de análises profundas por lote (vazio = ilimitado)</Label>
               <Input
                 type="number"
                 value={gate.maxDeepAnalysesPerBatch ?? ""}
@@ -199,41 +202,37 @@ export default function SettingsPage() {
                 disabled={!isAdmin}
                 onChange={(e) => setGate({ ...gate, requireEvidence: e.target.checked })}
               />{" "}
-              require DNS/HTTP evidence
+              exigir evidência de DNS/HTTP
             </label>
           </div>
           <h3 className="mb-1 mt-4 text-xs font-semibold uppercase text-neutral-500">
-            Pipeline (environment)
+            Pipeline (ambiente)
           </h3>
           <pre className="rounded bg-neutral-50 p-2 text-xs">
             {JSON.stringify(settings.data!.pipeline, null, 2)}
           </pre>
         </Card>
-        <Card title="Blacklist (preflight hard reject)">
+        <Card title="Lista de bloqueio (rejeição na pré-checagem)">
           {isAnalyst && (
             <form onSubmit={submitBl} className="mb-3 flex gap-2">
-              <Input
-                name="pattern"
-                placeholder="exact.com.br | .suffix.br | *substring*"
-                required
-              />
-              <Input name="reason" placeholder="reason" required />
+              <Input name="pattern" placeholder="exato.com.br | .sufixo.br | *trecho*" required />
+              <Input name="reason" placeholder="motivo" required />
               <Button type="submit" size="sm">
-                Add
+                Adicionar
               </Button>
             </form>
           )}
           {blacklist.isLoading ? (
             <Loading />
           ) : !blacklist.data?.items.length ? (
-            <Empty label="Blacklist is empty." />
+            <Empty label="A lista de bloqueio está vazia." />
           ) : (
             <table>
               <thead>
                 <tr>
-                  <th>Pattern</th>
-                  <th>Reason</th>
-                  <th>Added</th>
+                  <th>Padrão</th>
+                  <th>Motivo</th>
+                  <th>Adicionado em</th>
                   <th></th>
                 </tr>
               </thead>
@@ -246,7 +245,7 @@ export default function SettingsPage() {
                     <td>
                       {isAnalyst && (
                         <Button size="sm" variant="ghost" onClick={() => removeBl.mutate(b.id)}>
-                          remove
+                          remover
                         </Button>
                       )}
                     </td>
@@ -257,24 +256,26 @@ export default function SettingsPage() {
           )}
         </Card>
         {isAdmin && (
-          <Card title="Users" className="lg:col-span-2">
+          <Card title="Usuários" className="lg:col-span-2">
             <form onSubmit={submitUser} className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-5">
-              <Input name="email" type="email" placeholder="email" required autoComplete="off" />
-              <Input name="name" placeholder="name" required />
+              <Input name="email" type="email" placeholder="e-mail" required autoComplete="off" />
+              <Input name="name" placeholder="nome" required />
               <Input
                 name="password"
                 type="password"
-                placeholder="password (12+ chars)"
+                placeholder="senha (12+ caracteres)"
                 required
                 autoComplete="new-password"
               />
               <Select name="role" defaultValue="analyst">
-                <option value="viewer">viewer</option>
-                <option value="analyst">analyst</option>
-                <option value="admin">admin</option>
+                {ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {label(r)}
+                  </option>
+                ))}
               </Select>
               <Button type="submit" variant="primary">
-                Create user
+                Criar usuário
               </Button>
             </form>
             {users.isLoading ? (
@@ -283,11 +284,11 @@ export default function SettingsPage() {
               <table>
                 <thead>
                   <tr>
-                    <th>Email</th>
-                    <th>Name</th>
-                    <th>Role</th>
-                    <th>Active</th>
-                    <th>Last login</th>
+                    <th>E-mail</th>
+                    <th>Nome</th>
+                    <th>Papel</th>
+                    <th>Ativo</th>
+                    <th>Último acesso</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -299,11 +300,13 @@ export default function SettingsPage() {
                         <Select
                           value={u.role}
                           onChange={(e) => updateUser.mutate({ id: u.id, role: e.target.value })}
-                          className="w-28"
+                          className="w-32"
                         >
-                          <option value="viewer">viewer</option>
-                          <option value="analyst">analyst</option>
-                          <option value="admin">admin</option>
+                          {ROLES.map((r) => (
+                            <option key={r} value={r}>
+                              {label(r)}
+                            </option>
+                          ))}
                         </Select>
                       </td>
                       <td>
@@ -311,7 +314,7 @@ export default function SettingsPage() {
                           size="sm"
                           onClick={() => updateUser.mutate({ id: u.id, active: !u.active })}
                         >
-                          {u.active ? "active" : "inactive"}
+                          {u.active ? "ativo" : "inativo"}
                         </Button>
                       </td>
                       <td className="text-xs">{fmtDate(u.lastLoginAt)}</td>

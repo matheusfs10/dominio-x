@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { api, qs } from "@/lib/api";
-import { fmtDate, fmtScore } from "@/lib/format";
+import { fmtBool, fmtDate, fmtScore, label } from "@/lib/format";
 import { useRole } from "@/components/shell";
 import {
   Badge,
@@ -69,6 +69,17 @@ const DEFAULT_FILTERS = {
   order: "desc",
 };
 
+const SORT_LABELS: Record<string, string> = {
+  first_seen_at: "primeira vez visto",
+  last_seen_at: "última vez visto",
+  ascii_fqdn: "domínio (A–Z)",
+  overall_score: "nota geral",
+  confidence_score: "confiança",
+  name_score: "nota do nome",
+  seo_score: "nota de SEO",
+  risk_score: "risco",
+};
+
 export default function DomainsPage() {
   const router = useRouter();
   const { isAnalyst } = useRole();
@@ -108,8 +119,8 @@ export default function DomainsPage() {
   return (
     <div>
       <PageHeader
-        title="Domains"
-        subtitle="Server-side filtered explorer. Scores reflect the latest completed analysis."
+        title="Domínios"
+        subtitle="Explorador com filtros no servidor. As notas refletem a última análise concluída."
         actions={
           isAnalyst && (
             <form
@@ -132,10 +143,10 @@ export default function DomainsPage() {
                   checked={forceDeep}
                   onChange={(e) => setForceDeep(e.target.checked)}
                 />{" "}
-                deep
+                profunda
               </label>
               <Button type="submit" variant="primary" disabled={create.isPending}>
-                Analyze
+                Analisar
               </Button>
             </form>
           )
@@ -145,11 +156,11 @@ export default function DomainsPage() {
       <Card className="mb-4">
         <form onSubmit={apply} className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
           <div className="col-span-2">
-            <Label>Search</Label>
+            <Label>Busca</Label>
             <Input
               value={draft.q}
               onChange={(e) => set("q", e.target.value)}
-              placeholder="fqdn contains…"
+              placeholder="domínio contém…"
               name="q"
             />
           </div>
@@ -162,57 +173,57 @@ export default function DomainsPage() {
             />
           </div>
           <div>
-            <Label>Source</Label>
+            <Label>Fonte</Label>
             <Select value={draft.sourceKey} onChange={(e) => set("sourceKey", e.target.value)}>
-              <option value="">any</option>
-              <option value="registro_br_release">registro_br_release</option>
-              <option value="manual">manual</option>
-              <option value="csv_import">csv_import</option>
+              <option value="">qualquer</option>
+              <option value="registro_br_release">{label("registro_br_release")}</option>
+              <option value="manual">{label("manual")}</option>
+              <option value="csv_import">{label("csv_import")}</option>
             </Select>
           </div>
           <div>
-            <Label>Analysis status</Label>
+            <Label>Status da análise</Label>
             <Select
               value={draft.analysisStatus}
               onChange={(e) => set("analysisStatus", e.target.value)}
             >
-              <option value="">any</option>
+              <option value="">qualquer</option>
               {["queued", "running", "completed", "partial", "failed"].map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {label(s)}
                 </option>
               ))}
             </Select>
           </div>
           <div>
-            <Label>Disposition</Label>
+            <Label>Disposição</Label>
             <Select value={draft.disposition} onChange={(e) => set("disposition", e.target.value)}>
-              <option value="">any</option>
+              <option value="">qualquer</option>
               {["accepted", "needs_review", "quarantined", "rejected"].map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {label(s)}
                 </option>
               ))}
             </Select>
           </div>
           <div>
-            <Label>Manual disposition</Label>
+            <Label>Disposição manual</Label>
             <Select
               value={draft.manualDisposition}
               onChange={(e) => set("manualDisposition", e.target.value)}
             >
-              <option value="">any</option>
+              <option value="">qualquer</option>
               {["interesting", "rejected", "monitoring", "acquisition_target", "acquired"].map(
                 (s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {label(s)}
                   </option>
                 ),
               )}
             </Select>
           </div>
           <div>
-            <Label>Min overall</Label>
+            <Label>Nota geral mínima</Label>
             <Input
               type="number"
               min={0}
@@ -222,7 +233,7 @@ export default function DomainsPage() {
             />
           </div>
           <div>
-            <Label>Min confidence</Label>
+            <Label>Confiança mínima</Label>
             <Input
               type="number"
               min={0}
@@ -232,7 +243,7 @@ export default function DomainsPage() {
             />
           </div>
           <div>
-            <Label>Max risk</Label>
+            <Label>Risco máximo</Label>
             <Input
               type="number"
               min={0}
@@ -242,7 +253,7 @@ export default function DomainsPage() {
             />
           </div>
           <div>
-            <Label>Max digits</Label>
+            <Label>Máx. de dígitos</Label>
             <Input
               type="number"
               min={0}
@@ -251,7 +262,7 @@ export default function DomainsPage() {
             />
           </div>
           <div>
-            <Label>Max hyphens</Label>
+            <Label>Máx. de hífens</Label>
             <Input
               type="number"
               min={0}
@@ -260,7 +271,7 @@ export default function DomainsPage() {
             />
           </div>
           <div>
-            <Label>Max length</Label>
+            <Label>Tamanho máximo</Label>
             <Input
               type="number"
               min={1}
@@ -271,21 +282,21 @@ export default function DomainsPage() {
           <div>
             <Label>DNS</Label>
             <Select value={draft.hasDns} onChange={(e) => set("hasDns", e.target.value)}>
-              <option value="">any</option>
-              <option value="true">resolves</option>
-              <option value="false">no</option>
+              <option value="">qualquer</option>
+              <option value="true">resolve</option>
+              <option value="false">não resolve</option>
             </Select>
           </div>
           <div>
-            <Label>Semrush data</Label>
+            <Label>Dados Semrush</Label>
             <Select value={draft.hasSeo} onChange={(e) => set("hasSeo", e.target.value)}>
-              <option value="">any</option>
-              <option value="true">present</option>
-              <option value="false">absent</option>
+              <option value="">qualquer</option>
+              <option value="true">presentes</option>
+              <option value="false">ausentes</option>
             </Select>
           </div>
           <div>
-            <Label>HTTP status</Label>
+            <Label>Status HTTP</Label>
             <Input
               type="number"
               value={draft.httpStatus}
@@ -293,11 +304,11 @@ export default function DomainsPage() {
             />
           </div>
           <div>
-            <Label>Shortlisted</Label>
+            <Label>Em shortlist</Label>
             <Select value={draft.shortlisted} onChange={(e) => set("shortlisted", e.target.value)}>
-              <option value="">any</option>
-              <option value="true">yes</option>
-              <option value="false">no</option>
+              <option value="">qualquer</option>
+              <option value="true">sim</option>
+              <option value="false">não</option>
             </Select>
           </div>
           <div>
@@ -305,34 +316,25 @@ export default function DomainsPage() {
             <Input value={draft.tag} onChange={(e) => set("tag", e.target.value)} />
           </div>
           <div>
-            <Label>Sort</Label>
+            <Label>Ordenar por</Label>
             <Select value={draft.sort} onChange={(e) => set("sort", e.target.value)}>
-              {[
-                "first_seen_at",
-                "last_seen_at",
-                "ascii_fqdn",
-                "overall_score",
-                "confidence_score",
-                "name_score",
-                "seo_score",
-                "risk_score",
-              ].map((s) => (
-                <option key={s} value={s}>
-                  {s}
+              {Object.entries(SORT_LABELS).map(([value, text]) => (
+                <option key={value} value={value}>
+                  {text}
                 </option>
               ))}
             </Select>
           </div>
           <div>
-            <Label>Order</Label>
+            <Label>Ordem</Label>
             <Select value={draft.order} onChange={(e) => set("order", e.target.value)}>
-              <option value="desc">desc</option>
-              <option value="asc">asc</option>
+              <option value="desc">decrescente</option>
+              <option value="asc">crescente</option>
             </Select>
           </div>
           <div className="flex items-end gap-2">
             <Button type="submit" variant="primary">
-              Apply
+              Aplicar
             </Button>
             <Button
               type="button"
@@ -341,7 +343,7 @@ export default function DomainsPage() {
                 setFilters(DEFAULT_FILTERS);
               }}
             >
-              Reset
+              Limpar
             </Button>
           </div>
         </form>
@@ -352,25 +354,25 @@ export default function DomainsPage() {
         ) : query.error ? (
           <ErrorBox error={query.error} />
         ) : rows.length === 0 ? (
-          <Empty label="No domains match." />
+          <Empty label="Nenhum domínio corresponde aos filtros." />
         ) : (
           <div className="overflow-x-auto">
             <table>
               <thead>
                 <tr>
-                  <th>Domain</th>
+                  <th>Domínio</th>
                   <th>Status</th>
-                  <th>Disposition</th>
-                  <th>Overall</th>
+                  <th>Disposição</th>
+                  <th>Geral</th>
                   <th>Conf.</th>
-                  <th>Name</th>
+                  <th>Nome</th>
                   <th>SEO</th>
-                  <th>Risk</th>
+                  <th>Risco</th>
                   <th>DNS</th>
                   <th>HTTP</th>
-                  <th>Sources</th>
+                  <th>Fontes</th>
                   <th>Tags</th>
-                  <th>First seen</th>
+                  <th>Visto em</th>
                 </tr>
               </thead>
               <tbody>
@@ -384,7 +386,9 @@ export default function DomainsPage() {
                         {d.unicodeFqdn}
                       </Link>
                       {d.summary && d.summary.shortlistCount > 0 && (
-                        <span className="ml-1 text-xs text-amber-600">★</span>
+                        <span className="ml-1 text-xs text-amber-600" title="em shortlist">
+                          ★
+                        </span>
                       )}
                     </td>
                     <td>
@@ -394,7 +398,7 @@ export default function DomainsPage() {
                       <Badge value={d.summary?.disposition} />
                       {d.summary?.manualDisposition && (
                         <div className="mt-0.5 text-[11px] text-neutral-500">
-                          manual: {d.summary.manualDisposition}
+                          manual: {label(d.summary.manualDisposition)}
                         </div>
                       )}
                     </td>
@@ -407,15 +411,11 @@ export default function DomainsPage() {
                     <td>
                       <ScoreBar value={d.summary?.riskScore} invert />
                     </td>
-                    <td>
-                      {d.summary?.dnsResolves === null || d.summary?.dnsResolves === undefined
-                        ? "—"
-                        : d.summary.dnsResolves
-                          ? "yes"
-                          : "no"}
-                    </td>
+                    <td>{fmtBool(d.summary?.dnsResolves)}</td>
                     <td>{d.summary?.httpStatus ?? "—"}</td>
-                    <td className="text-xs text-neutral-500">{d.summary?.sourceKeys.join(", ")}</td>
+                    <td className="text-xs text-neutral-500">
+                      {d.summary?.sourceKeys.map(label).join(", ")}
+                    </td>
                     <td className="text-xs text-neutral-500">{d.summary?.tagKeys.join(", ")}</td>
                     <td className="text-xs text-neutral-500">{fmtDate(d.firstSeenAt)}</td>
                   </tr>
@@ -427,7 +427,7 @@ export default function DomainsPage() {
         {query.hasNextPage && (
           <div className="mt-3 text-center">
             <Button onClick={() => query.fetchNextPage()} disabled={query.isFetchingNextPage}>
-              {query.isFetchingNextPage ? "Loading…" : "Load more"}
+              {query.isFetchingNextPage ? "Carregando…" : "Carregar mais"}
             </Button>
           </div>
         )}

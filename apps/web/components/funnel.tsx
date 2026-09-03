@@ -3,15 +3,15 @@
 import { fmtNumber } from "@/lib/format";
 
 const STEPS: [string, string][] = [
-  ["total", "Total domains"],
-  ["newDomains", "New domains"],
-  ["analyzed", "Analyzed"],
-  ["rejectedLocally", "Rejected locally"],
-  ["gatePassed", "Passed candidate gate"],
-  ["paidAnalyzed", "Paid-analyzed"],
-  ["highPotential", "High potential (≥70)"],
-  ["shortlisted", "Shortlisted"],
-  ["failed", "Failed"],
+  ["total", "Domínios no lote"],
+  ["newDomains", "Domínios novos"],
+  ["analyzed", "Analisados"],
+  ["rejectedLocally", "Rejeitados localmente"],
+  ["gatePassed", "Passaram no gate"],
+  ["paidAnalyzed", "Análise paga"],
+  ["highPotential", "Alto potencial (≥70)"],
+  ["shortlisted", "Em shortlist"],
+  ["failed", "Falharam"],
 ];
 
 export function Funnel({ funnel }: { funnel: Record<string, number> }) {

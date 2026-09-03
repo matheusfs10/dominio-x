@@ -74,50 +74,50 @@ export default function OverviewPage() {
   return (
     <div>
       <PageHeader
-        title="Overview"
-        subtitle="Operational snapshot of ingestion, analysis and provider usage."
+        title="Visão geral"
+        subtitle="Panorama operacional de ingestão, análises e uso dos provedores."
       />
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
         <Stat
-          label="Domains known"
+          label="Domínios conhecidos"
           value={fmtNumber(d.domains.known)}
-          hint={`${fmtNumber(d.domains.newLast24h)} new in 24h`}
+          hint={`${fmtNumber(d.domains.newLast24h)} novos em 24 h`}
         />
         <Stat
-          label="Domains analyzed"
+          label="Domínios analisados"
           value={fmtNumber(d.domains.analyzed)}
-          hint={`${fmtNumber(d.domains.highScore)} scored ≥ 70`}
+          hint={`${fmtNumber(d.domains.highScore)} com nota ≥ 70`}
         />
         <Stat
-          label="Queue depth"
+          label="Fila"
           value={fmtNumber(d.queue.depth)}
-          hint={`${d.queue.active} active · crawler pending ${d.queue.crawler.pending ?? 0}`}
+          hint={`${d.queue.active} em execução · crawler pendente ${d.queue.crawler.pending ?? 0}`}
         />
         <Stat
-          label="Runs (24h)"
+          label="Análises (24 h)"
           value={`${fmtNumber(r24.completed)} ✓`}
-          hint={`${r24.partial ?? 0} partial · ${r24.failed ?? 0} failed · ${(r24.queued ?? 0) + (r24.running ?? 0)} open`}
+          hint={`${r24.partial ?? 0} parciais · ${r24.failed ?? 0} falhas · ${(r24.queued ?? 0) + (r24.running ?? 0)} abertas`}
         />
         <Stat
-          label="Semrush units"
+          label="Unidades Semrush"
           value={fmtNumber(d.usage.semrush.unitsThisMonth)}
           hint={
             d.usage.semrush.monthlyBudget
-              ? `${fmtPercent(d.usage.semrush.utilization)} of ${fmtNumber(d.usage.semrush.monthlyBudget)}`
-              : "no budget configured"
+              ? `${fmtPercent(d.usage.semrush.utilization)} de ${fmtNumber(d.usage.semrush.monthlyBudget)}`
+              : "sem orçamento configurado"
           }
         />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card
-          title="Latest Registro.br batch"
+          title="Último lote do Registro.br"
           actions={
             d.latestBatch && (
               <Link
                 className="text-xs text-sky-700 hover:underline"
                 href={`/batches/${d.latestBatch.batch.id}`}
               >
-                Open
+                Abrir
               </Link>
             )
           }
@@ -125,28 +125,28 @@ export default function OverviewPage() {
           {d.latestBatch ? (
             <div>
               <div className="mb-3 text-sm text-neutral-600">
-                Detected {fmtDate(d.latestBatch.batch.detectedAt)} ·{" "}
-                {fmtNumber(d.latestBatch.batch.domainCount)} domains ·{" "}
+                Detectado em {fmtDate(d.latestBatch.batch.detectedAt)} ·{" "}
+                {fmtNumber(d.latestBatch.batch.domainCount)} domínios ·{" "}
                 <Badge value={d.latestBatch.batch.status} />
               </div>
               <Funnel funnel={d.latestBatch.funnel} />
             </div>
           ) : (
-            <Empty label="No Registro.br batch ingested yet. The scheduler runs every 6 hours." />
+            <Empty label="Nenhum lote do Registro.br ingerido ainda. O agendador roda a cada 6 horas." />
           )}
         </Card>
-        <Card title="High-score candidates">
+        <Card title="Candidatos com maior nota">
           {d.topCandidates.length === 0 ? (
-            <Empty label="No scored domains yet." />
+            <Empty label="Nenhum domínio pontuado ainda." />
           ) : (
             <table>
               <thead>
                 <tr>
-                  <th>Domain</th>
-                  <th>Overall</th>
-                  <th>Confidence</th>
-                  <th>Risk</th>
-                  <th>Disposition</th>
+                  <th>Domínio</th>
+                  <th>Geral</th>
+                  <th>Confiança</th>
+                  <th>Risco</th>
+                  <th>Disposição</th>
                 </tr>
               </thead>
               <tbody>
@@ -176,14 +176,14 @@ export default function OverviewPage() {
             </table>
           )}
         </Card>
-        <Card title="Provider usage (7 days)">
+        <Card title="Uso dos provedores (7 dias)">
           <table>
             <thead>
               <tr>
-                <th>Provider</th>
-                <th>Requests</th>
-                <th>Units</th>
-                <th>Errors</th>
+                <th>Provedor</th>
+                <th>Requisições</th>
+                <th>Unidades</th>
+                <th>Erros</th>
               </tr>
             </thead>
             <tbody>
@@ -198,21 +198,21 @@ export default function OverviewPage() {
               {d.usage.totals.length === 0 && (
                 <tr>
                   <td colSpan={4}>
-                    <Empty label="No provider requests yet." />
+                    <Empty label="Nenhuma requisição a provedores ainda." />
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
           <p className="mt-2 text-xs text-neutral-500">
-            Cache hit rate {fmtPercent(d.usage.cache.hitRate)} · paid analyses skipped by gate{" "}
-            {fmtNumber(d.usage.paidSkipped.byCandidateGate)} · Semrush decision pending{" "}
-            {fmtNumber(d.usage.paidSkipped.decisionPending)}
+            Reaproveitamento (cache) {fmtPercent(d.usage.cache.hitRate)} · análises pagas barradas
+            pelo gate {fmtNumber(d.usage.paidSkipped.byCandidateGate)} · aguardando decisão do
+            Semrush {fmtNumber(d.usage.paidSkipped.decisionPending)}
           </p>
         </Card>
-        <Card title="Recent operational errors">
+        <Card title="Erros operacionais recentes">
           {d.recentErrors.length === 0 ? (
-            <Empty label="No recent errors." />
+            <Empty label="Nenhum erro recente." />
           ) : (
             <ul className="space-y-1 text-sm">
               {d.recentErrors.map((e) => (
