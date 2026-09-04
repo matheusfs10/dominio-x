@@ -227,9 +227,10 @@ export class DataForSeoClient {
     return { balanceUsd: money?.balance ?? 0, totalUsd: money?.total ?? 0 };
   }
 
+  /** `body` omitted = GET. */
   private async request(
     path: string,
-    body: unknown | undefined,
+    body?: unknown,
     signal?: AbortSignal,
   ): Promise<{ payload: unknown; httpStatus: number }> {
     const timeout = AbortSignal.timeout(this.timeoutMs);

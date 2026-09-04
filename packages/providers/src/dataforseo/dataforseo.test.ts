@@ -79,7 +79,7 @@ function configuredProvider(fetchImpl: ReturnType<typeof mockFetch>) {
     login: config.DATAFORSEO_LOGIN!,
     password: config.DATAFORSEO_PASSWORD!,
     timeoutMs: config.DATAFORSEO_TIMEOUT_MS,
-    fetchImpl: fetchImpl as unknown as typeof fetch,
+    fetchImpl,
   });
   return new DataForSeoProvider({ config, client, now: () => NOW });
 }
@@ -158,7 +158,7 @@ describe("DataForSeoProvider", () => {
         login: "x",
         password: "y",
         timeoutMs: 1000,
-        fetchImpl: fetchImpl as unknown as typeof fetch,
+        fetchImpl,
       }),
     });
     expect(provider.isConfigured()).toBe(false);
@@ -182,7 +182,7 @@ describe("DataForSeoProvider", () => {
         login: "l",
         password: "p",
         timeoutMs: 1000,
-        fetchImpl: fetchImpl as unknown as typeof fetch,
+        fetchImpl,
       }),
     });
     const result = await provider.enrich({ domain, analysisRunId: "r" });
@@ -223,10 +223,12 @@ describe("DataForSeoProvider", () => {
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     const [url, init] = fetchImpl.mock.calls[0]!;
-    expect(String(url)).toContain(
-      "/v3/dataforseo_labs/google/historical_bulk_traffic_estimation/live",
+    expect(url).toBe(
+      "https://api.dataforseo.com/v3/dataforseo_labs/google/historical_bulk_traffic_estimation/live",
     );
-    const body = JSON.parse(String(init!.body)) as {
+    const raw = init?.body;
+    expect(typeof raw).toBe("string");
+    const body = JSON.parse(raw as string) as {
       targets: string[];
       location_code: number;
       date_from: string;
