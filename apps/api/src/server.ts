@@ -25,7 +25,12 @@ async function main() {
   const redis = createRedisConnection(config.REDIS_URL);
   const queues = createQueues(redisConnectionOptions(config.REDIS_URL));
   const storage = createObjectStorage(config);
-  const providers = createProviderRegistry({ pipeline: config, semrush: config, redis });
+  const providers = createProviderRegistry({
+    pipeline: config,
+    semrush: config,
+    dataforseo: config,
+    redis,
+  });
   const core: CoreContext = {
     db: database.db,
     storage,
@@ -33,6 +38,7 @@ async function main() {
     providers,
     pipeline: config,
     semrush: config,
+    dataforseo: config,
     logger,
   };
 
@@ -49,6 +55,7 @@ async function main() {
       port: config.PORT,
       storage: storage.driver,
       semrush: providers.semrush.describeStatus().state,
+      dataforseo: providers.dataforseo.describeStatus().state,
     },
     "api listening",
   );

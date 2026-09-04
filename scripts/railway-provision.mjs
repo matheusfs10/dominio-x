@@ -302,6 +302,17 @@ try {
       SEMRUSH_MAX_RPS: "8",
       SEMRUSH_MAX_CONCURRENCY: "8",
       SEMRUSH_DATA_TTL_DAYS: "30",
+      // Paid traffic provider: off until the operator sets the credentials and reviews the
+      // free traffic gate in Settings. Credentials are never provisioned from here.
+      DATAFORSEO_ENABLED: "false",
+      DATAFORSEO_LOCATION_CODE: "2076",
+      DATAFORSEO_LOCATION_NAME: "Brazil",
+      DATAFORSEO_LANGUAGE_CODE: "pt",
+      DATAFORSEO_WINDOW_MONTHS: "6",
+      DATAFORSEO_MAX_RPS: "2",
+      DATAFORSEO_MAX_CONCURRENCY: "2",
+      DATAFORSEO_DATA_TTL_DAYS: "30",
+      DATAFORSEO_MONTHLY_COST_BUDGET_USD: "20",
       PIPELINE_WORKER_CONCURRENCY: "5",
       DNS_TTL_HOURS: "24",
       HTTP_TTL_HOURS: "72",

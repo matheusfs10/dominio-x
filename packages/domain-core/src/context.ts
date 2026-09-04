@@ -1,4 +1,4 @@
-import type { PipelineConfig, SemrushConfig } from "@dominio-x/config";
+import type { DataForSeoConfig, PipelineConfig, SemrushConfig } from "@dominio-x/config";
 import type { Db } from "@dominio-x/database";
 import type { Logger } from "@dominio-x/observability";
 import type { ProviderRegistry } from "@dominio-x/providers";
@@ -16,6 +16,7 @@ export interface CoreContext {
   providers: ProviderRegistry;
   pipeline: PipelineConfig;
   semrush: SemrushConfig;
+  dataforseo: DataForSeoConfig;
   logger: Logger;
   now?: () => Date;
 }

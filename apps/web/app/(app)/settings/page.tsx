@@ -27,7 +27,36 @@ interface Settings {
     requireEvidence: boolean;
     maxDeepAnalysesPerBatch: number | null;
   };
+  trafficGate: TrafficGate;
   pipeline: Record<string, unknown>;
+}
+interface TrafficGate {
+  enabled: boolean;
+  maxDigits: number;
+  maxHyphens: number;
+  minSldLength: number;
+  maxSldLength: number;
+  maxRandomness: number;
+  allowPunycode: boolean;
+  requireDictionaryToken: boolean;
+  allowedTlds: string[];
+  requireDnsResolution: boolean;
+  requireHttpReachable: boolean;
+  allowedHttpStatuses: number[];
+  requireCandidateGate: boolean;
+  reuseWithinDays: number;
+  maxLookupsPerBatch: number | null;
+  maxLookupsPerDay: number | null;
+  maxLookupsPerMonth: number | null;
+  monthlyCostBudgetUsd: number | null;
+  minAccountBalanceUsd: number;
+}
+interface DataForSeoAccount {
+  configured: boolean;
+  state: string;
+  balanceUsd: number | null;
+  totalUsd: number | null;
+  error?: string;
 }
 interface Blacklist {
   id: string;
@@ -46,6 +75,13 @@ interface User {
 
 const ROLES = ["viewer", "analyst", "admin"] as const;
 
+const splitList = (value: string): string[] =>
+  value
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0);
+const numOrNull = (value: string): number | null => (value === "" ? null : Number(value));
+
 export default function SettingsPage() {
   const qc = useQueryClient();
   const { isAdmin, isAnalyst } = useRole();
@@ -63,12 +99,26 @@ export default function SettingsPage() {
     enabled: isAdmin,
   });
   const [gate, setGate] = useState<Settings["candidateGate"] | null>(null);
+  const [traffic, setTraffic] = useState<TrafficGate | null>(null);
   useEffect(() => {
-    if (settings.data) setGate(settings.data.candidateGate);
+    if (settings.data) {
+      setGate(settings.data.candidateGate);
+      setTraffic(settings.data.trafficGate);
+    }
   }, [settings.data]);
   const saveGate = useMutation({
     mutationFn: () => api.patch("/settings", { candidateGate: gate }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
+  });
+  const saveTraffic = useMutation({
+    mutationFn: () => api.patch("/settings", { trafficGate: traffic }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
+  });
+  // The upstream balance endpoint is free, but it is still a network call: only on demand.
+  const account = useQuery({
+    queryKey: ["dataforseo-account"],
+    queryFn: () => api.get<DataForSeoAccount>("/providers/dataforseo/account"),
+    enabled: false,
   });
   const addBl = useMutation({
     mutationFn: (input: { pattern: string; reason: string }) => api.post("/blacklist", input),
@@ -107,13 +157,18 @@ export default function SettingsPage() {
     e.currentTarget.reset();
   }
 
-  if (settings.isLoading || !gate) return <Loading />;
+  if (settings.isLoading || !gate || !traffic) return <Loading />;
   return (
     <div>
       <PageHeader title="Configurações" />
       <ErrorBox
         error={
-          saveGate.error ?? addBl.error ?? removeBl.error ?? createUser.error ?? updateUser.error
+          saveGate.error ??
+          saveTraffic.error ??
+          addBl.error ??
+          removeBl.error ??
+          createUser.error ??
+          updateUser.error
         }
       />
       <div className="grid gap-4 lg:grid-cols-2">
@@ -211,6 +266,266 @@ export default function SettingsPage() {
           <pre className="rounded bg-neutral-50 p-2 text-xs">
             {JSON.stringify(settings.data!.pipeline, null, 2)}
           </pre>
+        </Card>
+        <Card
+          title="Gate de tráfego (consultas pagas ao DataForSEO)"
+          actions={
+            isAdmin && (
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => void account.refetch()}>
+                  Consultar saldo
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => saveTraffic.mutate()}>
+                  Salvar
+                </Button>
+              </div>
+            )
+          }
+        >
+          <p className="mb-3 text-xs text-neutral-500">
+            Toda checagem aqui usa dados que já temos de graça (nome, DNS, crawler e o próprio
+            histórico de consultas). Um domínio que reprova em qualquer checagem ativa{" "}
+            <strong>nunca chega ao DataForSEO</strong> e portanto não custa nada. Analista pode
+            forçar uma consulta em &ldquo;análise profunda&rdquo;: isso pula as checagens de
+            qualificação, mas nunca os limites de volume e de custo.
+          </p>
+          {account.data && (
+            <p className="mb-3 rounded bg-neutral-50 p-2 text-xs">
+              Conta DataForSEO:{" "}
+              {account.data.balanceUsd === null
+                ? `sem saldo disponível (${label(account.data.state)}${account.data.error ? ` — ${account.data.error}` : ""})`
+                : `saldo US$ ${account.data.balanceUsd.toFixed(2)} de US$ ${(account.data.totalUsd ?? 0).toFixed(2)} depositados`}
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <label className="col-span-2 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={traffic.enabled}
+                disabled={!isAdmin}
+                onChange={(e) => setTraffic({ ...traffic, enabled: e.target.checked })}
+              />{" "}
+              consulta automática ligada (desligada, só rodam consultas forçadas)
+            </label>
+
+            <h3 className="col-span-2 mt-1 text-xs font-semibold uppercase text-neutral-500">
+              Formato do nome
+            </h3>
+            <div>
+              <Label>Máx. de dígitos (0 = nenhum número)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={traffic.maxDigits}
+                disabled={!isAdmin}
+                onChange={(e) => setTraffic({ ...traffic, maxDigits: Number(e.target.value) })}
+              />
+            </div>
+            <div>
+              <Label>Máx. de hífens</Label>
+              <Input
+                type="number"
+                min={0}
+                value={traffic.maxHyphens}
+                disabled={!isAdmin}
+                onChange={(e) => setTraffic({ ...traffic, maxHyphens: Number(e.target.value) })}
+              />
+            </div>
+            <div>
+              <Label>Tamanho mínimo do SLD</Label>
+              <Input
+                type="number"
+                min={1}
+                value={traffic.minSldLength}
+                disabled={!isAdmin}
+                onChange={(e) => setTraffic({ ...traffic, minSldLength: Number(e.target.value) })}
+              />
+            </div>
+            <div>
+              <Label>Tamanho máximo do SLD</Label>
+              <Input
+                type="number"
+                min={1}
+                value={traffic.maxSldLength}
+                disabled={!isAdmin}
+                onChange={(e) => setTraffic({ ...traffic, maxSldLength: Number(e.target.value) })}
+              />
+            </div>
+            <div>
+              <Label>Aleatoriedade máxima (0–1)</Label>
+              <Input
+                type="number"
+                step="0.05"
+                min={0}
+                max={1}
+                value={traffic.maxRandomness}
+                disabled={!isAdmin}
+                onChange={(e) => setTraffic({ ...traffic, maxRandomness: Number(e.target.value) })}
+              />
+            </div>
+            <div>
+              <Label>TLDs permitidos (vírgula; vazio = qualquer)</Label>
+              <Input
+                value={traffic.allowedTlds.join(", ")}
+                disabled={!isAdmin}
+                placeholder="com.br, br"
+                onChange={(e) =>
+                  setTraffic({ ...traffic, allowedTlds: splitList(e.target.value) })
+                }
+              />
+            </div>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={traffic.allowPunycode}
+                disabled={!isAdmin}
+                onChange={(e) => setTraffic({ ...traffic, allowPunycode: e.target.checked })}
+              />{" "}
+              aceitar nomes IDN/punycode
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={traffic.requireDictionaryToken}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setTraffic({ ...traffic, requireDictionaryToken: e.target.checked })
+                }
+              />{" "}
+              exigir palavra de dicionário
+            </label>
+
+            <h3 className="col-span-2 mt-1 text-xs font-semibold uppercase text-neutral-500">
+              Evidência de rede
+            </h3>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={traffic.requireDnsResolution}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setTraffic({ ...traffic, requireDnsResolution: e.target.checked })
+                }
+              />{" "}
+              exigir resolução de DNS
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={traffic.requireHttpReachable}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setTraffic({ ...traffic, requireHttpReachable: e.target.checked })
+                }
+              />{" "}
+              exigir site respondendo
+            </label>
+            <div>
+              <Label>Status HTTP aceitos (vírgula; vazio = qualquer)</Label>
+              <Input
+                value={traffic.allowedHttpStatuses.join(", ")}
+                disabled={!isAdmin}
+                placeholder="200, 301"
+                onChange={(e) =>
+                  setTraffic({
+                    ...traffic,
+                    allowedHttpStatuses: splitList(e.target.value)
+                      .map(Number)
+                      .filter((n) => Number.isFinite(n)),
+                  })
+                }
+              />
+            </div>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={traffic.requireCandidateGate}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setTraffic({ ...traffic, requireCandidateGate: e.target.checked })
+                }
+              />{" "}
+              exigir aprovação no gate de candidatos
+            </label>
+
+            <h3 className="col-span-2 mt-1 text-xs font-semibold uppercase text-neutral-500">
+              Limites de volume e de custo
+            </h3>
+            <div>
+              <Label>Carência entre consultas do mesmo domínio (dias)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={traffic.reuseWithinDays}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setTraffic({ ...traffic, reuseWithinDays: Number(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label>Máx. de consultas por lote (vazio = ilimitado)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={traffic.maxLookupsPerBatch ?? ""}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setTraffic({ ...traffic, maxLookupsPerBatch: numOrNull(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label>Máx. de consultas por dia (vazio = ilimitado)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={traffic.maxLookupsPerDay ?? ""}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setTraffic({ ...traffic, maxLookupsPerDay: numOrNull(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label>Máx. de consultas por mês (vazio = ilimitado)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={traffic.maxLookupsPerMonth ?? ""}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setTraffic({ ...traffic, maxLookupsPerMonth: numOrNull(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label>Orçamento mensal em US$ (vazio = só o do ambiente)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min={0}
+                value={traffic.monthlyCostBudgetUsd ?? ""}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setTraffic({ ...traffic, monthlyCostBudgetUsd: numOrNull(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label>Saldo mínimo da conta em US$ (0 = não checar)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min={0}
+                value={traffic.minAccountBalanceUsd}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setTraffic({ ...traffic, minAccountBalanceUsd: Number(e.target.value) })
+                }
+              />
+            </div>
+          </div>
         </Card>
         <Card title="Lista de bloqueio (rejeição na pré-checagem)">
           {isAnalyst && (

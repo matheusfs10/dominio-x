@@ -8,6 +8,13 @@
       "when": 1788364469863,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788492151736,
+      "tag": "0001_dataforseo_traffic",
+      "breakpoints": true
     }
   ]
 }

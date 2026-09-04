@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { api, qs } from "@/lib/api";
-import { fmtBool, fmtDate, fmtScore, label } from "@/lib/format";
+import { fmtBool, fmtDate, fmtNumber, fmtScore, label } from "@/lib/format";
 import { useRole } from "@/components/shell";
 import {
   Badge,
@@ -39,6 +39,8 @@ interface DomainRow {
     dnsResolves: boolean | null;
     httpStatus: number | null;
     hasSeoData: boolean | null;
+    trafficVisitsTotal: number | null;
+    hasTrafficData: boolean | null;
     shortlistCount: number;
     tagKeys: string[];
     sourceKeys: string[];
@@ -59,6 +61,8 @@ const DEFAULT_FILTERS = {
   minConfidence: "",
   hasDns: "",
   hasSeo: "",
+  hasTraffic: "",
+  minVisits: "",
   shortlisted: "",
   maxDigits: "",
   maxHyphens: "",
@@ -78,6 +82,7 @@ const SORT_LABELS: Record<string, string> = {
   name_score: "nota do nome",
   seo_score: "nota de SEO",
   risk_score: "risco",
+  traffic_visits: "visitantes estimados",
 };
 
 export default function DomainsPage() {
@@ -296,6 +301,23 @@ export default function DomainsPage() {
             </Select>
           </div>
           <div>
+            <Label>Dados de tráfego</Label>
+            <Select value={draft.hasTraffic} onChange={(e) => set("hasTraffic", e.target.value)}>
+              <option value="">qualquer</option>
+              <option value="true">presentes</option>
+              <option value="false">ausentes</option>
+            </Select>
+          </div>
+          <div>
+            <Label>Mín. de visitantes no período</Label>
+            <Input
+              type="number"
+              min={0}
+              value={draft.minVisits}
+              onChange={(e) => set("minVisits", e.target.value)}
+            />
+          </div>
+          <div>
             <Label>Status HTTP</Label>
             <Input
               type="number"
@@ -367,6 +389,7 @@ export default function DomainsPage() {
                   <th>Conf.</th>
                   <th>Nome</th>
                   <th>SEO</th>
+                  <th>Visitantes</th>
                   <th>Risco</th>
                   <th>DNS</th>
                   <th>HTTP</th>
@@ -408,6 +431,9 @@ export default function DomainsPage() {
                     <td>{fmtScore(d.summary?.confidenceScore)}</td>
                     <td>{fmtScore(d.summary?.nameScore)}</td>
                     <td>{fmtScore(d.summary?.seoScore)}</td>
+                    <td title="visitantes estimados no período configurado">
+                      {fmtNumber(d.summary?.trafficVisitsTotal)}
+                    </td>
                     <td>
                       <ScoreBar value={d.summary?.riskScore} invert />
                     </td>

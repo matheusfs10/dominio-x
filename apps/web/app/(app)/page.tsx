@@ -51,6 +51,15 @@ interface Dashboard {
     };
     cache: { hitRate: number | null };
     paidSkipped: { byCandidateGate: number; decisionPending: number };
+    dataforseo: {
+      state: string;
+      lookupsThisMonth: number;
+      costThisMonthUsd: number;
+      monthlyCostBudgetUsd: number | null;
+      locationName: string;
+      windowMonths: number;
+    };
+    trafficSkipped: { blockedBy: string; count: number }[];
   };
   recentErrors: {
     id: string;
@@ -208,6 +217,16 @@ export default function OverviewPage() {
             Reaproveitamento (cache) {fmtPercent(d.usage.cache.hitRate)} · análises pagas barradas
             pelo gate {fmtNumber(d.usage.paidSkipped.byCandidateGate)} · aguardando decisão do
             Semrush {fmtNumber(d.usage.paidSkipped.decisionPending)}
+          </p>
+          <p className="mt-1 text-xs text-neutral-500">
+            DataForSEO ({d.usage.dataforseo.locationName}, {d.usage.dataforseo.windowMonths} meses):{" "}
+            {fmtNumber(d.usage.dataforseo.lookupsThisMonth)} consultas no mês · US${" "}
+            {fmtNumber(d.usage.dataforseo.costThisMonthUsd, 2)}
+            {d.usage.dataforseo.monthlyCostBudgetUsd !== null
+              ? ` de US$ ${fmtNumber(d.usage.dataforseo.monthlyCostBudgetUsd, 2)}`
+              : ""}{" "}
+            · {fmtNumber(d.usage.trafficSkipped.reduce((n, r) => n + r.count, 0))} barradas pelo
+            gate de tráfego
           </p>
         </Card>
         <Card title="Erros operacionais recentes">

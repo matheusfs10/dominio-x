@@ -9,6 +9,7 @@ import {
   recordAudit,
   removeBlacklistEntry,
   updateCandidateGateSettings,
+  updateTrafficGateSettings,
 } from "@dominio-x/domain-core";
 import { actorOf, requireRole, requireUser } from "../auth/session.js";
 import type { ApiDeps } from "../deps.js";
@@ -29,6 +30,12 @@ export const settingsRoutes: FastifyPluginAsync<{ deps: ApiDeps }> = async (app,
         httpTtlHours: deps.config.HTTP_TTL_HOURS,
         semrushDataTtlDays: deps.config.SEMRUSH_DATA_TTL_DAYS,
         providerRestrictedRetentionDays: deps.config.PROVIDER_RESTRICTED_RETENTION_DAYS,
+        dataforseoEnabled: deps.config.DATAFORSEO_ENABLED,
+        dataforseoLocation: `${deps.config.DATAFORSEO_LOCATION_NAME} (${deps.config.DATAFORSEO_LOCATION_CODE})`,
+        dataforseoWindowMonths: deps.config.DATAFORSEO_WINDOW_MONTHS,
+        dataforseoDataTtlDays: deps.config.DATAFORSEO_DATA_TTL_DAYS,
+        dataforseoMonthlyCostBudgetUsd:
+          deps.config.DATAFORSEO_MONTHLY_COST_BUDGET_USD ?? null,
       },
     }),
   );
@@ -44,14 +51,17 @@ export const settingsRoutes: FastifyPluginAsync<{ deps: ApiDeps }> = async (app,
       const candidateGate = request.body.candidateGate
         ? await updateCandidateGateSettings(db, request.body.candidateGate, user.id)
         : undefined;
+      const trafficGate = request.body.trafficGate
+        ? await updateTrafficGateSettings(db, request.body.trafficGate, user.id)
+        : undefined;
       await recordAudit(db, {
         action: "settings.updated",
         actor: actorOf(request),
         targetType: "settings",
-        targetId: "candidate_gate",
+        targetId: Object.keys(request.body).join(",") || "settings",
         details: request.body,
       });
-      return { ...(await getAllSettings(db)), updated: { candidateGate } };
+      return { ...(await getAllSettings(db)), updated: { candidateGate, trafficGate } };
     },
   );
 

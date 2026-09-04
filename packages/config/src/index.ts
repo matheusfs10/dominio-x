@@ -102,6 +102,36 @@ export const semrushSchema = z.object({
   SEMRUSH_TIMEOUT_MS: intFrom(15_000),
 });
 
+/**
+ * DataForSEO — paid estimated-search-traffic provider.
+ *
+ * Credentials are the API login/password pair from the DataForSEO dashboard (Basic auth),
+ * never the account password. Nothing here is required to boot: with the provider disabled or
+ * unconfigured the traffic stage is skipped and the run stays valid.
+ */
+export const dataForSeoSchema = z.object({
+  DATAFORSEO_ENABLED: bool.default(false),
+  DATAFORSEO_LOGIN: optionalString,
+  DATAFORSEO_PASSWORD: optionalString,
+  DATAFORSEO_BASE_URL: z.string().url().default("https://api.dataforseo.com"),
+  /** Google geo target id of the audience to measure. 2076 = Brazil. */
+  DATAFORSEO_LOCATION_CODE: z.coerce.number().int().min(1).default(2076),
+  DATAFORSEO_LOCATION_NAME: z.string().default("Brazil"),
+  DATAFORSEO_LANGUAGE_CODE: z.string().min(2).max(10).default("pt"),
+  /** Size of the rolling history window, in whole months. */
+  DATAFORSEO_WINDOW_MONTHS: z.coerce.number().int().min(1).max(24).default(6),
+  DATAFORSEO_MAX_RPS: z.coerce.number().min(0.1).max(30).default(2),
+  DATAFORSEO_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(30).default(2),
+  DATAFORSEO_DATA_TTL_DAYS: z.coerce.number().min(1).default(30),
+  /** Upper bound in USD for a calendar month (UTC); the DB setting may lower it further. */
+  DATAFORSEO_MONTHLY_COST_BUDGET_USD: z.coerce.number().min(0).optional(),
+  /** Assumed price of one lookup before the response reports the real cost. */
+  DATAFORSEO_ESTIMATED_COST_PER_CALL_USD: z.coerce.number().min(0).default(0.02),
+  /** Seconds to cache the free account-balance lookup. */
+  DATAFORSEO_BALANCE_CACHE_SECONDS: z.coerce.number().int().min(0).default(300),
+  DATAFORSEO_TIMEOUT_MS: intFrom(20_000),
+});
+
 export const pipelineSchema = z.object({
   PIPELINE_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(100).default(5),
   DNS_TTL_HOURS: z.coerce.number().min(0).default(24),
@@ -141,6 +171,7 @@ export const apiConfigSchema = baseSchema
   .extend(redisSchema.shape)
   .extend(securitySchema.shape)
   .extend(semrushSchema.shape)
+  .extend(dataForSeoSchema.shape)
   .extend(pipelineSchema.shape)
   .extend(registroBrSchema.shape)
   .extend({
@@ -165,6 +196,7 @@ export const workerConfigSchema = baseSchema
   .extend(databaseSchema.shape)
   .extend(redisSchema.shape)
   .extend(semrushSchema.shape)
+  .extend(dataForSeoSchema.shape)
   .extend(pipelineSchema.shape)
   .and(storageSchema);
 
@@ -182,6 +214,7 @@ export type WorkerConfig = z.infer<typeof workerConfigSchema>;
 export type SchedulerConfig = z.infer<typeof schedulerConfigSchema>;
 export type CrawlerConfig = z.infer<typeof crawlerConfigSchema>;
 export type SemrushConfig = z.infer<typeof semrushSchema>;
+export type DataForSeoConfig = z.infer<typeof dataForSeoSchema>;
 export type PipelineConfig = z.infer<typeof pipelineSchema>;
 export type StorageConfig = z.infer<typeof storageSchema>;
 

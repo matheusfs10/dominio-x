@@ -31,4 +31,38 @@ export const providerRoutes: FastifyPluginAsync<{ deps: ApiDeps }> = async (app,
       return getProvider(deps.core, request.params.key);
     },
   );
+
+  /**
+   * Live account balance of the paid traffic provider. The upstream endpoint is documented as
+   * free of charge and the result is cached in the adapter, so this is safe to call from the UI.
+   */
+  r.get(
+    "/providers/dataforseo/account",
+    { schema: { tags: ["providers"] }, preHandler: requireRole("admin") },
+    async () => {
+      const provider = deps.core.providers.dataforseo;
+      const status = provider.describeStatus();
+      if (!status.configured) {
+        return { configured: false, state: status.state, balanceUsd: null, totalUsd: null };
+      }
+      try {
+        const account = await provider.accountBalance();
+        return {
+          configured: true,
+          state: status.state,
+          balanceUsd: account.balanceUsd,
+          totalUsd: account.totalUsd,
+        };
+      } catch (error) {
+        deps.core.logger.warn({ err: error }, "dataforseo balance lookup failed");
+        return {
+          configured: true,
+          state: status.state,
+          balanceUsd: null,
+          totalUsd: null,
+          error: error instanceof Error ? error.message : "unknown error",
+        };
+      }
+    },
+  );
 };

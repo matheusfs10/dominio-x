@@ -1,5 +1,6 @@
 import type { Redis } from "ioredis";
-import type { PipelineConfig, SemrushConfig } from "@dominio-x/config";
+import type { DataForSeoConfig, PipelineConfig, SemrushConfig } from "@dominio-x/config";
+import { DataForSeoProvider } from "./dataforseo/index.js";
 import { DnsProvider } from "./dns/index.js";
 import { LexicalProvider } from "./lexical/index.js";
 import { RdapProvider } from "./rdap/index.js";
@@ -11,6 +12,7 @@ export interface ProviderRegistry {
   dns: DnsProvider;
   rdap: RdapProvider;
   semrush: SemrushProvider;
+  dataforseo: DataForSeoProvider;
   all(): EnrichmentProvider[];
   get(key: string): EnrichmentProvider | undefined;
 }
@@ -18,6 +20,7 @@ export interface ProviderRegistry {
 export function createProviderRegistry(options: {
   pipeline: PipelineConfig;
   semrush: SemrushConfig;
+  dataforseo: DataForSeoConfig;
   redis?: Redis;
 }): ProviderRegistry {
   const lexical = new LexicalProvider();
@@ -27,12 +30,14 @@ export function createProviderRegistry(options: {
     ttlHours: options.pipeline.RDAP_TTL_HOURS,
   });
   const semrush = new SemrushProvider({ config: options.semrush, redis: options.redis });
-  const list: EnrichmentProvider[] = [lexical, dns, rdap, semrush];
+  const dataforseo = new DataForSeoProvider({ config: options.dataforseo, redis: options.redis });
+  const list: EnrichmentProvider[] = [lexical, dns, rdap, semrush, dataforseo];
   return {
     lexical,
     dns,
     rdap,
     semrush,
+    dataforseo,
     all: () => list,
     get: (key) => list.find((p) => p.key === key),
   };

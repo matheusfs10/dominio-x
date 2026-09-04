@@ -22,6 +22,7 @@ export const QUEUE_NAMES: Record<PipelineStage, string> = {
   crawl: "domain-crawl",
   candidate_gate: "domain-candidate-gate",
   seo: "domain-seo",
+  traffic: "domain-traffic",
   rules: "domain-rules",
   score: "domain-score",
   complete: "domain-complete",

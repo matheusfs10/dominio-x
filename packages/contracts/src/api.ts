@@ -60,6 +60,7 @@ export const domainSortFields = [
   "name_score",
   "seo_score",
   "risk_score",
+  "traffic_visits",
 ] as const;
 
 const optionalBool = z
@@ -86,6 +87,9 @@ export const listDomainsQuerySchema = paginationQuerySchema.extend({
   maxHyphens: z.coerce.number().int().min(0).optional(),
   maxLength: z.coerce.number().int().min(1).optional(),
   hasSeo: optionalBool,
+  hasTraffic: optionalBool,
+  /** Minimum estimated visits over the whole traffic window, for the configured location. */
+  minVisits: z.coerce.number().min(0).optional(),
   hasDns: optionalBool,
   httpStatus: z.coerce.number().int().optional(),
   shortlisted: optionalBool,
@@ -213,8 +217,56 @@ export const candidateGateSettingsSchema = z.object({
 });
 export type CandidateGateSettings = z.infer<typeof candidateGateSettingsSchema>;
 
+/**
+ * Free qualification policy for the paid traffic provider (DataForSEO).
+ *
+ * Every field below is evaluated against evidence the platform already owns for free
+ * (lexical, DNS, crawler, candidate gate) plus counters kept in our own ledger. A domain that
+ * fails any active check is never sent to the provider, so it costs nothing. This is the
+ * cheap-first funnel: the gate exists to protect the account balance, not to be permissive.
+ */
+export const trafficGateSettingsSchema = z.object({
+  /** Master switch for the automatic pipeline lookup. When false, only forced lookups run. */
+  enabled: z.boolean().default(false),
+
+  // --- Name shape (free: lexical provider) ---
+  /** Domains with more digits than this never qualify. 0 = no digits allowed at all. */
+  maxDigits: z.number().int().min(0).max(63).default(0),
+  maxHyphens: z.number().int().min(0).max(63).default(1),
+  minSldLength: z.number().int().min(1).max(63).default(3),
+  maxSldLength: z.number().int().min(1).max(63).default(20),
+  maxRandomness: z.number().min(0).max(1).default(0.6),
+  allowPunycode: z.boolean().default(false),
+  requireDictionaryToken: z.boolean().default(false),
+  /** Empty list = any TLD. Values are compared against the normalized public suffix. */
+  allowedTlds: z.array(z.string().min(1).max(63)).max(50).default(["com.br", "br"]),
+
+  // --- Network evidence (free: DNS + isolated crawler) ---
+  requireDnsResolution: z.boolean().default(true),
+  requireHttpReachable: z.boolean().default(false),
+  /** Only ask the provider about hosts that answered with one of these statuses. Empty = any. */
+  allowedHttpStatuses: z.array(z.number().int().min(100).max(599)).max(20).default([]),
+  /** Reuse the existing candidate gate decision as a precondition. */
+  requireCandidateGate: z.boolean().default(true),
+
+  // --- Volume caps (free: our own ledger) ---
+  /** Skip the call when a measurement younger than this exists. 0 = always re-query. */
+  reuseWithinDays: z.number().int().min(0).max(365).default(30),
+  maxLookupsPerBatch: z.number().int().min(0).nullable().default(50),
+  maxLookupsPerDay: z.number().int().min(0).nullable().default(200),
+  maxLookupsPerMonth: z.number().int().min(0).nullable().default(2000),
+
+  // --- Money caps (free: our own ledger + the provider's free balance endpoint) ---
+  /** Hard stop in USD for a calendar month (UTC). null = only the env/provider budget applies. */
+  monthlyCostBudgetUsd: z.number().min(0).nullable().default(20),
+  /** Refuse to call when the account balance is below this. 0 = do not check the balance. */
+  minAccountBalanceUsd: z.number().min(0).default(0),
+});
+export type TrafficGateSettings = z.infer<typeof trafficGateSettingsSchema>;
+
 export const updateSettingsBodySchema = z.object({
   candidateGate: candidateGateSettingsSchema.partial().optional(),
+  trafficGate: trafficGateSettingsSchema.partial().optional(),
 });
 
 // ---------------------------------------------------------------------------

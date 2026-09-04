@@ -1,15 +1,81 @@
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
+import { PROVIDER_KEYS } from "@dominio-x/contracts";
 import {
+  analysisRuns,
   analysisSteps,
   providerRequests,
   providers,
   type Db,
   type DbOrTx,
 } from "@dominio-x/database";
-import type { SemrushConfig } from "@dominio-x/config";
+import type { DataForSeoConfig, SemrushConfig } from "@dominio-x/config";
+import { getTrafficGateSettings } from "./settings.js";
+import { lowestBudget, type TrafficGateCounters } from "./traffic-gate.js";
 
 export function startOfMonthUtc(now = new Date()): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+export function startOfDayUtc(now = new Date()): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+/** USD billed by a provider since the start of the current UTC month. */
+export async function monthlyCostUsd(
+  db: DbOrTx,
+  providerKey: string,
+  now = new Date(),
+): Promise<number> {
+  const [row] = await db
+    .select({ cost: sql<number>`coalesce(sum(${providerRequests.estimatedCostUsd}), 0)::float` })
+    .from(providerRequests)
+    .where(
+      and(
+        eq(providerRequests.providerKey, providerKey),
+        gte(providerRequests.startedAt, startOfMonthUtc(now)),
+      ),
+    );
+  return row?.cost ?? 0;
+}
+
+/**
+ * Billed-call counters used by the traffic gate. Only requests that did not fail are counted:
+ * the provider does not charge for a failed task, so a failure must not eat the budget.
+ */
+export async function providerCallCounters(
+  db: DbOrTx,
+  providerKey: string,
+  options: { sourceBatchId?: string | null; now?: Date } = {},
+): Promise<TrafficGateCounters> {
+  const now = options.now ?? new Date();
+  const billed = and(
+    eq(providerRequests.providerKey, providerKey),
+    isNull(providerRequests.errorCode),
+  );
+  const [totals] = await db
+    .select({
+      today: sql<number>`count(*) filter (where ${providerRequests.startedAt} >= ${startOfDayUtc(now)})::int`,
+      month: sql<number>`count(*) filter (where ${providerRequests.startedAt} >= ${startOfMonthUtc(now)})::int`,
+      costMonth: sql<number>`coalesce(sum(${providerRequests.estimatedCostUsd}) filter (where ${providerRequests.startedAt} >= ${startOfMonthUtc(now)}), 0)::float`,
+    })
+    .from(providerRequests)
+    .where(billed);
+
+  let lookupsInBatch: number | null = null;
+  if (options.sourceBatchId) {
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(providerRequests)
+      .innerJoin(analysisRuns, eq(analysisRuns.id, providerRequests.analysisRunId))
+      .where(and(billed, eq(analysisRuns.sourceBatchId, options.sourceBatchId)));
+    lookupsInBatch = row?.n ?? 0;
+  }
+  return {
+    lookupsToday: totals?.today ?? 0,
+    lookupsThisMonth: totals?.month ?? 0,
+    lookupsInBatch,
+    costThisMonthUsd: totals?.costMonth ?? 0,
+  };
 }
 
 export async function monthlyUnitsUsed(
@@ -56,6 +122,17 @@ export interface UsageReport {
     utilization: number | null;
     costThisMonthUsd: number;
   };
+  dataforseo: {
+    state: string;
+    lookupsToday: number;
+    lookupsThisMonth: number;
+    costThisMonthUsd: number;
+    monthlyCostBudgetUsd: number | null;
+    utilization: number | null;
+    /** Size of the traffic window in whole months, and the audience location it describes. */
+    windowMonths: number;
+    locationName: string;
+  };
   cache: { reusedObservations: number; providerCalls: number; hitRate: number | null };
   paidSkipped: {
     byCandidateGate: number;
@@ -63,11 +140,13 @@ export interface UsageReport {
     decisionPending: number;
     notConfigured: number;
   };
+  /** Traffic lookups the free gate refused, grouped by the check that blocked them. */
+  trafficSkipped: { blockedBy: string; count: number }[];
 }
 
 export async function usageReport(
   db: Db,
-  config: SemrushConfig,
+  config: { semrush: SemrushConfig; dataforseo: DataForSeoConfig; trafficState?: string },
   options: { days: number; now?: Date },
 ): Promise<UsageReport> {
   const now = options.now ?? new Date();
@@ -116,7 +195,30 @@ export async function usageReport(
         gte(providerRequests.startedAt, startOfMonthUtc(now)),
       ),
     );
-  const monthlyBudget = semrushRow?.monthlyUnitBudget ?? config.SEMRUSH_MONTHLY_UNIT_BUDGET ?? null;
+  const monthlyBudget =
+    semrushRow?.monthlyUnitBudget ?? config.semrush.SEMRUSH_MONTHLY_UNIT_BUDGET ?? null;
+
+  const trafficGate = await getTrafficGateSettings(db);
+  const counters = await providerCallCounters(db, PROVIDER_KEYS.DATAFORSEO, { now });
+  const trafficBudget = lowestBudget(
+    trafficGate.monthlyCostBudgetUsd,
+    config.dataforseo.DATAFORSEO_MONTHLY_COST_BUDGET_USD ?? null,
+  );
+  const trafficSkipped = await db
+    .select({
+      blockedBy: sql<string>`coalesce(${analysisSteps.metadataJson}->>'blockedBy', 'unknown')`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(analysisSteps)
+    .where(
+      and(
+        eq(analysisSteps.stepKey, "traffic"),
+        eq(analysisSteps.status, "skipped"),
+        gte(analysisSteps.startedAt, since),
+      ),
+    )
+    .groupBy(sql`coalesce(${analysisSteps.metadataJson}->>'blockedBy', 'unknown')`)
+    .orderBy(sql`count(*) desc`);
 
   const [stepStats] = await db
     .select({
@@ -151,6 +253,16 @@ export async function usageReport(
       utilization: monthlyBudget ? unitsThisMonth / monthlyBudget : null,
       costThisMonthUsd: costRow?.cost ?? 0,
     },
+    dataforseo: {
+      state: config.trafficState ?? "unknown",
+      lookupsToday: counters.lookupsToday,
+      lookupsThisMonth: counters.lookupsThisMonth,
+      costThisMonthUsd: counters.costThisMonthUsd,
+      monthlyCostBudgetUsd: trafficBudget,
+      utilization: trafficBudget ? counters.costThisMonthUsd / trafficBudget : null,
+      windowMonths: config.dataforseo.DATAFORSEO_WINDOW_MONTHS,
+      locationName: config.dataforseo.DATAFORSEO_LOCATION_NAME,
+    },
     cache: {
       reusedObservations: reused,
       providerCalls: measured,
@@ -162,6 +274,7 @@ export async function usageReport(
       decisionPending: stepStats?.pending ?? 0,
       notConfigured: stepStats?.notConfigured ?? 0,
     },
+    trafficSkipped,
   };
 }
 

@@ -7,6 +7,7 @@ import {
   SEED_PROVIDERS,
   SEED_RULESET_V1,
   SEED_SCORE_MODEL_V1,
+  SEED_SCORE_MODEL_V2,
   SEED_SETTINGS,
   SEED_SOURCES,
 } from "./seed-data.js";
@@ -98,6 +99,15 @@ export async function seedDatabase(db: Db, options: SeedOptions = {}): Promise<S
       .values({ ...SEED_SCORE_MODEL_V1, status: "active", activatedAt: new Date() });
     report.scoreModelCreated = true;
     log("score model v1 created and activated");
+  }
+
+  const existingModelV2 = await db.query.scoreModels.findFirst({
+    where: eq(scoreModels.version, SEED_SCORE_MODEL_V2.version),
+  });
+  if (!existingModelV2) {
+    // Draft on purpose: it changes scoring for every future run, so an admin activates it.
+    await db.insert(scoreModels).values({ ...SEED_SCORE_MODEL_V2, status: "draft" });
+    log("score model v2 created as draft (traffic signals; activate it when ready)");
   }
 
   const existingRuleset = await db.query.rulesets.findFirst({

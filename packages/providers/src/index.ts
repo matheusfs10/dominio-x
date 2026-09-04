@@ -3,6 +3,7 @@ export * from "./lexical/index.js";
 export * from "./dns/index.js";
 export * from "./rdap/index.js";
 export * from "./semrush/index.js";
+export * from "./dataforseo/index.js";
 export * from "./circuit-breaker.js";
 export * from "./rate-limit/local.js";
 export * from "./rate-limit/redis.js";

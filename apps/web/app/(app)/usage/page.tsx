@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { fmtDate, fmtNumber, fmtPercent } from "@/lib/format";
+import { fmtDate, fmtNumber, fmtPercent, label } from "@/lib/format";
 import { Card, ErrorBox, Loading, PageHeader, Select, Stat } from "@/components/ui";
 
 interface Usage {
@@ -33,6 +33,16 @@ interface Usage {
     utilization: number | null;
     costThisMonthUsd: number;
   };
+  dataforseo: {
+    state: string;
+    lookupsToday: number;
+    lookupsThisMonth: number;
+    costThisMonthUsd: number;
+    monthlyCostBudgetUsd: number | null;
+    utilization: number | null;
+    windowMonths: number;
+    locationName: string;
+  };
   cache: { reusedObservations: number; providerCalls: number; hitRate: number | null };
   paidSkipped: {
     byCandidateGate: number;
@@ -40,6 +50,7 @@ interface Usage {
     decisionPending: number;
     notConfigured: number;
   };
+  trafficSkipped: { blockedBy: string; count: number }[];
 }
 
 export default function UsagePage() {
@@ -51,6 +62,8 @@ export default function UsagePage() {
   if (q.isLoading) return <Loading />;
   if (q.error) return <ErrorBox error={q.error} />;
   const u = q.data!;
+  const trafficBlocked = u.trafficSkipped.reduce((acc, r) => acc + r.count, 0);
+  const topBlocker = u.trafficSkipped[0] ?? null;
   return (
     <div>
       <PageHeader
@@ -65,6 +78,40 @@ export default function UsagePage() {
           </Select>
         }
       />
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat
+          label="Custo DataForSEO (mês)"
+          value={`US$ ${fmtNumber(u.dataforseo.costThisMonthUsd, 2)}`}
+          hint={
+            u.dataforseo.monthlyCostBudgetUsd !== null
+              ? `orçamento US$ ${fmtNumber(u.dataforseo.monthlyCostBudgetUsd, 2)} · ${fmtPercent(u.dataforseo.utilization)}`
+              : "sem orçamento mensal definido"
+          }
+        />
+        <Stat
+          label="Consultas de tráfego"
+          value={fmtNumber(u.dataforseo.lookupsThisMonth)}
+          hint={`${fmtNumber(u.dataforseo.lookupsToday)} hoje · ${u.dataforseo.locationName}, ${u.dataforseo.windowMonths} meses`}
+        />
+        <Stat
+          label="Barradas pelo gate de tráfego"
+          value={fmtNumber(trafficBlocked)}
+          hint={
+            topBlocker
+              ? `mais comum: ${label(topBlocker.blockedBy)} (${fmtNumber(topBlocker.count)})`
+              : "nenhuma consulta barrada no período"
+          }
+        />
+        <Stat label="Provedor de tráfego" value={label(u.dataforseo.state)} />
+      </div>
+      {u.dataforseo.monthlyCostBudgetUsd !== null && (
+        <div className="mb-4 h-2 w-full overflow-hidden rounded bg-neutral-200">
+          <div
+            className={`h-full ${(u.dataforseo.utilization ?? 0) > 0.9 ? "bg-rose-500" : "bg-emerald-500"}`}
+            style={{ width: `${Math.min(100, (u.dataforseo.utilization ?? 0) * 100)}%` }}
+          />
+        </div>
+      )}
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
         <Stat
           label="Unidades Semrush (mês)"
@@ -133,6 +180,33 @@ export default function UsagePage() {
               ))}
             </tbody>
           </table>
+        </Card>
+        <Card title="Onde o gate de tráfego barrou as consultas pagas">
+          <p className="mb-3 text-xs text-neutral-500">
+            Cada linha é uma consulta ao DataForSEO que <strong>não</strong> foi feita, e a
+            checagem gratuita que a impediu. Se o funil estiver barrando demais, ajuste os limites
+            em Configurações › Gate de tráfego.
+          </p>
+          {u.trafficSkipped.length === 0 ? (
+            <p className="text-xs text-neutral-500">Nenhuma consulta barrada no período.</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Checagem</th>
+                  <th>Consultas barradas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {u.trafficSkipped.map((r) => (
+                  <tr key={r.blockedBy}>
+                    <td>{label(r.blockedBy)}</td>
+                    <td>{fmtNumber(r.count)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </Card>
         <Card title="Requisições por provedor / dia">
           <div className="max-h-96 overflow-auto">

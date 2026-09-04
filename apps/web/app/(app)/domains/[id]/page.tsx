@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { fmtDate, fmtScore, label, scoreTone } from "@/lib/format";
+import { fmtDate, fmtNumber, fmtScore, label, scoreTone } from "@/lib/format";
 import { useRole } from "@/components/shell";
 import {
   Badge,
@@ -76,6 +76,9 @@ interface Detail {
     summaryJson: {
       candidateGatePassed?: boolean;
       candidateGateReasons?: string[];
+      trafficGatePassed?: boolean;
+      trafficGateBlockedBy?: string | null;
+      trafficGateReasons?: string[];
       rules?: { disposition: string; dispositionReasons: string[] };
     };
   }[];
@@ -111,6 +114,13 @@ interface Observation {
   expiresAt: string | null;
   analysisRunId: string | null;
   purgedAt: string | null;
+  metadataJson?: unknown;
+}
+interface TrafficMonth {
+  month: string;
+  visits: number;
+  paidVisits: number;
+  serpCount: number;
 }
 interface RuleExec {
   id: string;
@@ -151,6 +161,105 @@ function obsValue(o: Observation): string {
   if (o.valueType === "boolean") return o.valueBoolean ? "sim" : "não";
   if (o.valueType === "text") return o.valueText ?? "";
   return JSON.stringify(o.valueJson);
+}
+
+
+/**
+ * Estimated search traffic for the audience location configured for the provider (Brazil by
+ * default). These are estimates derived from ranking positions and search volume, not analytics
+ * visits, and they only describe that one location.
+ */
+function TrafficCard({ items }: { items: Observation[] }) {
+  const byKey = new Map(items.map((o) => [o.metricKey, o]));
+  const num = (key: string): number | null => {
+    const o = byKey.get(key);
+    return o && o.state === "measured" ? o.valueNumeric : null;
+  };
+  const text = (key: string): string | null => {
+    const o = byKey.get(key);
+    return o && o.state === "measured" ? o.valueText : null;
+  };
+  const gate = byKey.get("internal.traffic_gate_passed");
+  const gateMeta = (gate?.metadataJson ?? {}) as { reasons?: string[] };
+  const series = (byKey.get("traffic.monthly_series")?.valueJson ?? null) as TrafficMonth[] | null;
+  const total = num("traffic.visits_total");
+  const location = text("traffic.location_name") ?? "Brasil";
+  const windowMonths = num("traffic.window_months");
+  const from = text("traffic.window_from");
+  const to = text("traffic.window_to");
+  const trend = num("traffic.trend_ratio");
+  const title = `Visitantes estimados · ${location}${windowMonths ? ` · ${windowMonths} meses` : ""}`;
+
+  if (!series || series.length === 0) {
+    const blocked = gate?.valueBoolean === false;
+    return (
+      <Card title={title}>
+        <Empty
+          label={
+            blocked
+              ? `Consulta paga não realizada — ${(gateMeta.reasons ?? ["barrada pelo gate de tráfego"]).join("; ")}`
+              : "Sem dados de tráfego. A consulta paga ainda não rodou para este domínio."
+          }
+        />
+      </Card>
+    );
+  }
+
+  const peak = Math.max(...series.map((m) => m.visits), 1);
+  return (
+    <Card title={title}>
+      <p className="mb-3 text-xs text-neutral-500">
+        Estimativa de visitas vindas da busca orgânica do Google em {location}
+        {from && to ? ` entre ${from} e ${to}` : ""}. É uma estimativa (posição no SERP ×
+        volume de busca), não a medição real de visitantes do site.
+      </p>
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div>
+          <div className="text-xs text-neutral-500">Total no período</div>
+          <div className="text-lg font-semibold">{fmtNumber(total)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-neutral-500">Média mensal</div>
+          <div className="text-lg font-semibold">
+            {fmtNumber(num("traffic.visits_monthly_avg"))}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-neutral-500">Último mês</div>
+          <div className="text-lg font-semibold">{fmtNumber(num("traffic.visits_last_month"))}</div>
+        </div>
+        <div>
+          <div className="text-xs text-neutral-500">Tendência (2ª metade / 1ª)</div>
+          <div
+            className={`text-lg font-semibold ${
+              trend === null ? "text-neutral-400" : trend >= 1 ? "text-emerald-700" : "text-rose-700"
+            }`}
+          >
+            {trend === null ? "n/d" : `${trend}×`}
+          </div>
+        </div>
+      </div>
+      <div className="flex h-32 items-end gap-2">
+        {series.map((m) => (
+          <div key={m.month} className="flex flex-1 flex-col items-center justify-end gap-1">
+            <span className="text-[10px] text-neutral-600">{fmtNumber(m.visits)}</span>
+            <div
+              className="w-full rounded-t bg-sky-500"
+              style={{ height: `${Math.max(2, (m.visits / peak) * 100)}%` }}
+              title={`${m.month}: ${m.visits} visitas estimadas`}
+            />
+            <span className="text-[10px] text-neutral-500">{m.month.slice(5)}/{m.month.slice(2, 4)}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-neutral-600 md:grid-cols-4">
+        <span>Meses com tráfego: {fmtNumber(num("traffic.months_with_traffic"))}</span>
+        <span>Pico mensal: {fmtNumber(num("traffic.visits_peak_month"))}</span>
+        <span>Visitas pagas (anúncios): {fmtNumber(num("traffic.paid_visits_total"))}</span>
+        <span>SERPs no último mês: {fmtNumber(num("traffic.serp_count_last_month"))}</span>
+      </div>
+    </Card>
+  );
 }
 
 export default function DomainDetailPage() {
@@ -309,6 +418,7 @@ export default function DomainDetailPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
+          <TrafficCard items={observations.data?.items ?? []} />
           <Card
             title={`Notas por dimensão${s ? ` · modelo v${s.scoreModelVersion} · ${fmtDate(s.createdAt)}` : ""}`}
           >
@@ -589,6 +699,15 @@ export default function DomainDetailPage() {
                     <div className="text-[11px] text-neutral-500">
                       gate: {r.summaryJson.candidateGatePassed ? "aprovado" : "negado"} ·{" "}
                       {r.summaryJson.candidateGateReasons.join("; ")}
+                    </div>
+                  )}
+                  {r.summaryJson.trafficGateReasons && (
+                    <div className="text-[11px] text-neutral-500">
+                      tráfego: {r.summaryJson.trafficGatePassed ? "consultado" : "não consultado"}
+                      {r.summaryJson.trafficGateBlockedBy
+                        ? ` (${label(r.summaryJson.trafficGateBlockedBy)})`
+                        : ""}{" "}
+                      · {r.summaryJson.trafficGateReasons.join("; ")}
                     </div>
                   )}
                   <Link

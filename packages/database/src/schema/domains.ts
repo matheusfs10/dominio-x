@@ -74,6 +74,11 @@ export const domainSummaries = pgTable(
     dnsResolves: boolean("dns_resolves"),
     httpStatus: integer("http_status"),
     hasSeoData: boolean("has_seo_data"),
+    /** Estimated visits over the configured traffic window, for the configured location. */
+    trafficVisitsTotal: real("traffic_visits_total"),
+    trafficVisitsLastMonth: real("traffic_visits_last_month"),
+    trafficTrendRatio: real("traffic_trend_ratio"),
+    hasTrafficData: boolean("has_traffic_data"),
     candidateGatePassed: boolean("candidate_gate_passed"),
     shortlistCount: integer("shortlist_count").notNull().default(0),
     sourceKeys: text("source_keys")
@@ -93,6 +98,7 @@ export const domainSummaries = pgTable(
     index("domain_summaries_disposition_idx").on(t.disposition),
     index("domain_summaries_manual_idx").on(t.manualDisposition),
     index("domain_summaries_updated_idx").on(t.updatedAt),
+    index("domain_summaries_traffic_idx").on(t.trafficVisitsTotal),
   ],
 );
 

@@ -25,7 +25,15 @@ export async function dashboard(ctx: CoreContext) {
     getQueueCounts(ctx.queues).catch(() => []),
     crawlerQueueCounts(db),
     latestBatchForSource(db, SOURCE_KEYS.REGISTRO_BR_RELEASE),
-    usageReport(db, ctx.semrush, { days: 7 }),
+    usageReport(
+      db,
+      {
+        semrush: ctx.semrush,
+        dataforseo: ctx.dataforseo,
+        trafficState: ctx.providers.dataforseo.describeStatus().state,
+      },
+      { days: 7 },
+    ),
     db.select().from(operationalEvents).orderBy(desc(operationalEvents.createdAt)).limit(20),
   ]);
   const batchDetail = latestBatch ? await getBatchDetail(db, latestBatch.id) : null;
@@ -69,6 +77,8 @@ export async function dashboard(ctx: CoreContext) {
       semrush: usage.semrush,
       cache: usage.cache,
       paidSkipped: usage.paidSkipped,
+      dataforseo: usage.dataforseo,
+      trafficSkipped: usage.trafficSkipped,
     },
     recentErrors: errors,
   };

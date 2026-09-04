@@ -10,7 +10,7 @@ import {
   redisConnectionOptions,
 } from "@dominio-x/queue";
 import { createObjectStorage } from "@dominio-x/storage";
-import { semrushSchema } from "@dominio-x/config";
+import { dataForSeoSchema, semrushSchema } from "@dominio-x/config";
 
 export interface SchedulerRuntime {
   config: SchedulerConfig;
@@ -34,7 +34,8 @@ export async function createSchedulerRuntime(service: string): Promise<Scheduler
   const queues = createQueues(redisConnectionOptions(config.REDIS_URL));
   const storage = createObjectStorage(config);
   const semrush = semrushSchema.parse(process.env);
-  const providers = createProviderRegistry({ pipeline: config, semrush });
+  const dataforseo = dataForSeoSchema.parse(process.env);
+  const providers = createProviderRegistry({ pipeline: config, semrush, dataforseo });
   const core: CoreContext = {
     db: database.db,
     storage,
@@ -42,6 +43,7 @@ export async function createSchedulerRuntime(service: string): Promise<Scheduler
     providers,
     pipeline: config,
     semrush,
+    dataforseo,
     logger,
   };
   return {

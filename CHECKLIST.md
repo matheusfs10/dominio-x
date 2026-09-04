@@ -65,6 +65,24 @@ Legend: [x] done · [~] partial / blocked · [ ] not started
 - [x] `scheduler-registro-br` deployed (cron `0 */6 * * *` UTC, exits when done); Postgres volume 5 GB, Redis 2 GB
 - [x] Registro.br production verification: 158,227 domains ingested (0 invalid), raw artifact in the bucket, immutable batch, analyses enqueued, second run reports 304 with no new batch; failed batches are resumed automatically
 
+## M11 — DataForSEO (tráfego estimado por país)
+- [x] Adapter isolado `packages/providers/src/dataforseo/` (client + mapping); nenhuma URL ou campo
+      do fornecedor fora do diretório
+- [x] Endpoint DataForSEO Labs `historical_bulk_traffic_estimation` (janela de N meses completos,
+      `location_code` configurável — 2076 = Brasil por padrão)
+- [x] **Gate gratuito de qualificação** (`traffic-gate.ts`): forma do nome (dígitos, hífens, tamanho,
+      aleatoriedade, punycode, dicionário, TLD), evidência de rede (DNS/HTTP/gate de candidatos),
+      carência por domínio, limites por lote/dia/mês e orçamento mensal em US$ + saldo mínimo
+- [x] Estágio `traffic` no pipeline (após `seo`), reuso por TTL, motivo do bloqueio registrado por
+      checagem; `PIPELINE_VERSION` 1.1.0
+- [x] Custo real informado pelo provedor gravado no ledger (`provider_requests.estimated_cost_usd`)
+- [x] Migração `0001_dataforseo_traffic` (colunas de tráfego em `domain_summaries`)
+- [x] UI pt-BR: card de visitantes estimados no domínio, formulário do gate em Configurações,
+      custos/bloqueios em Uso e custos, filtros e ordenação no explorador
+- [x] Modelo de pontuação v2 semeado como **rascunho** (`useTrafficSignals`); v1 segue ativo
+- [ ] Verificação em produção com credenciais reais (aguarda o operador definir os limites e ligar
+      `DATAFORSEO_ENABLED`)
+
 ## Quality gates (local, 2026-09-02)
 - [x] `pnpm lint` · `pnpm typecheck` · `pnpm test` (135 tests: unit + integration incl. API, pipeline, SSRF) · `pnpm build`
 - [x] Playwright critical flow passes against the local full stack (`E2E=1 node scripts/local-stack.mjs`)

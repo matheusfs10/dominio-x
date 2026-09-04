@@ -22,6 +22,11 @@ export type ScoreWeights = z.infer<typeof scoreWeightsSchema>;
 
 export const scoreModelConfigSchema = z.object({
   riskPenaltyFactor: z.number().min(0).max(1).default(0.35),
+  /**
+   * Feed the paid traffic provider's estimates into the SEO dimension. Off by default so that
+   * models created before the provider existed keep scoring exactly as they did.
+   */
+  useTrafficSignals: z.boolean().default(false),
   expectedDimensions: z
     .array(z.enum(SCORE_DIMENSIONS))
     .default(["name", "brand", "seo", "link", "history", "commercial", "risk"]),
@@ -319,32 +324,86 @@ function brandDimension(ctx: MetricContext): DimensionResult {
   return { score: clamp(score), positive, negative, missing: [] };
 }
 
-function seoDimension(ctx: MetricContext, providers: ProviderOutcome[]): DimensionResult {
+function seoDimension(
+  ctx: MetricContext,
+  providers: ProviderOutcome[],
+  useTrafficSignals: boolean,
+): DimensionResult {
   const positive: ExplanationItem[] = [];
   const negative: ExplanationItem[] = [];
   const keywords = num(ctx, METRICS.SEO_ORGANIC_KEYWORDS);
   const traffic = num(ctx, METRICS.SEO_ESTIMATED_ORGANIC_TRAFFIC);
   const authority = num(ctx, METRICS.SEO_AUTHORITY);
-  if (keywords === null && traffic === null && authority === null) {
+  const visits = useTrafficSignals ? num(ctx, METRICS.TRAFFIC_VISITS_MONTHLY_AVG) : null;
+  if (keywords === null && traffic === null && authority === null && visits === null) {
     const seoProvider = providers.find((p) => p.providerKey === "semrush");
-    const reason =
-      seoProvider?.outcome === "decision_pending"
-        ? "SEO provider integration mode not yet decided (standby)"
-        : seoProvider?.outcome === "not_configured"
-          ? "SEO provider not configured"
-          : seoProvider?.outcome === "skipped"
-            ? `Deep analysis skipped: ${seoProvider.reason ?? "candidate gate"}`
-            : seoProvider?.outcome === "failed"
-              ? `SEO provider failed: ${seoProvider.reason ?? "error"}`
-              : "No SEO provider evidence";
+    const trafficProvider = providers.find((p) => p.providerKey === "dataforseo");
+    const explain = (p: ProviderOutcome | undefined, label: string): string | null => {
+      if (!p) return null;
+      if (p.outcome === "decision_pending") return `${label} integration mode not yet decided`;
+      if (p.outcome === "not_configured") return `${label} not configured`;
+      if (p.outcome === "skipped") return `${label} skipped: ${p.reason ?? "gate"}`;
+      if (p.outcome === "failed") return `${label} failed: ${p.reason ?? "error"}`;
+      return null;
+    };
+    const reasons = [
+      explain(seoProvider, "SEO provider"),
+      useTrafficSignals ? explain(trafficProvider, "Traffic provider") : null,
+    ].filter((r): r is string => r !== null);
     return {
       score: null,
       positive,
       negative,
-      missing: [{ signal: "SEO traffic / keywords", reason, dimension: "seo" }],
+      missing: [
+        {
+          signal: "SEO traffic / keywords",
+          reason: reasons.length > 0 ? reasons.join("; ") : "No SEO provider evidence",
+          dimension: "seo",
+        },
+      ],
     };
   }
   let score = 0;
+  if (visits !== null) {
+    // ~22 points per order of magnitude of estimated monthly visits in the target location.
+    const part = clamp(Math.log10(visits + 1) * 22);
+    score = Math.max(score, part);
+    (visits > 0 ? positive : negative).push({
+      signal: "Estimated visits (traffic provider)",
+      impact: Math.round(part),
+      evidence: `${Math.round(visits)} visits/month`,
+      dimension: "seo",
+    });
+    const monthsWith = num(ctx, METRICS.TRAFFIC_MONTHS_WITH_TRAFFIC);
+    const windowMonths = num(ctx, METRICS.TRAFFIC_WINDOW_MONTHS);
+    if (monthsWith !== null && windowMonths !== null && monthsWith >= windowMonths) {
+      score = clamp(score + 5);
+      positive.push({
+        signal: "Traffic in every month of the window",
+        impact: 5,
+        evidence: `${monthsWith}/${windowMonths} months`,
+        dimension: "seo",
+      });
+    }
+    const trend = num(ctx, METRICS.TRAFFIC_TREND_RATIO);
+    if (trend !== null && trend >= 1.1) {
+      score = clamp(score + 5);
+      positive.push({
+        signal: "Rising traffic",
+        impact: 5,
+        evidence: `${trend}x against the first half of the window`,
+        dimension: "seo",
+      });
+    } else if (trend !== null && trend <= 0.7) {
+      score = clamp(score - 5);
+      negative.push({
+        signal: "Falling traffic",
+        impact: -5,
+        evidence: `${trend}x against the first half of the window`,
+        dimension: "seo",
+      });
+    }
+  }
   if (keywords !== null) {
     const part = clamp(Math.log10(keywords + 1) * 25);
     score = Math.max(score, part);
@@ -596,7 +655,7 @@ export function computeScores(model: ScoreModelDefinition, input: ScoringInput):
   const dims: Record<ScoreDimension, DimensionResult> = {
     name: nameDimension(metrics),
     brand: brandDimension(metrics),
-    seo: seoDimension(metrics, providers),
+    seo: seoDimension(metrics, providers, model.config.useTrafficSignals),
     link: linkDimension(metrics),
     history: historyDimension(metrics),
     commercial: commercialDimension(metrics),

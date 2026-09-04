@@ -42,6 +42,7 @@ import { findDomainById } from "./domains.js";
 import {
   freshProviderObservations,
   latestObservations,
+  latestProviderObservationAt,
   measuredBoolean,
   measuredNumeric,
   recordObservations,
@@ -49,8 +50,14 @@ import {
   toMetricContext,
 } from "./observations.js";
 import { getActiveCompiledRuleset } from "./rulesets.js";
-import { getCandidateGateSettings } from "./settings.js";
-import { monthlyUnitsUsed } from "./usage.js";
+import { getCandidateGateSettings, getTrafficGateSettings } from "./settings.js";
+import {
+  decideTrafficGate,
+  evaluateTrafficBudget,
+  evaluateTrafficQualification,
+  type TrafficGateDecision,
+} from "./traffic-gate.js";
+import { monthlyUnitsUsed, providerCallCounters } from "./usage.js";
 
 export interface JobMeta {
   attemptsMade: number;
@@ -63,7 +70,8 @@ const NEXT: Partial<Record<PipelineStage, PipelineStage>> = {
   dns: "crawl",
   crawl: "candidate_gate",
   candidate_gate: "seo",
-  seo: "rules",
+  seo: "traffic",
+  traffic: "rules",
   rules: "score",
   score: "complete",
 };
@@ -150,6 +158,9 @@ export async function processStage(
         break;
       case "seo":
         await stageSeo(ctx, sc);
+        break;
+      case "traffic":
+        await stageTraffic(ctx, sc);
         break;
       case "rules":
         await stageRules(ctx, sc);
@@ -372,6 +383,17 @@ async function syncSummaryFromProvider(
     await db
       .update(domainSummaries)
       .set({ httpStatus: measuredNumeric(metrics, METRICS.HTTP_STATUS), updatedAt: new Date() })
+      .where(eq(domainSummaries.domainId, domainId));
+  } else if (providerKey === PROVIDER_KEYS.DATAFORSEO) {
+    await db
+      .update(domainSummaries)
+      .set({
+        trafficVisitsTotal: measuredNumeric(metrics, METRICS.TRAFFIC_VISITS_TOTAL),
+        trafficVisitsLastMonth: measuredNumeric(metrics, METRICS.TRAFFIC_VISITS_LAST_MONTH),
+        trafficTrendRatio: measuredNumeric(metrics, METRICS.TRAFFIC_TREND_RATIO),
+        hasTrafficData: measuredBoolean(metrics, METRICS.TRAFFIC_HAS_DATA),
+        updatedAt: new Date(),
+      })
       .where(eq(domainSummaries.domainId, domainId));
   } else if (providerKey === PROVIDER_KEYS.SEMRUSH) {
     const has =
@@ -619,6 +641,211 @@ async function providerBudget(ctx: CoreContext): Promise<{ used: number; limit: 
 }
 
 // ---------------------------------------------------------------------------
+// Stage F — traffic (paid provider behind the free qualification gate)
+// ---------------------------------------------------------------------------
+
+/**
+ * Estimated search traffic for the configured audience location (Brazil by default) over a
+ * rolling window of whole months.
+ *
+ * Cheap-first, in this order, so that the common case costs nothing:
+ *   1. fresh observations are reused (no call);
+ *   2. a domain measured inside the cooldown window is not re-measured (no call);
+ *   3. the free qualification gate (name shape, DNS/HTTP evidence, candidate gate) must pass;
+ *   4. volume and money caps from our own ledger must pass;
+ *   5. only then is one paid lookup issued, and the price the provider reports is written to
+ *      the request ledger.
+ * Every skip is recorded with the exact check that blocked it, so the usage dashboard can show
+ * where the funnel is losing candidates.
+ */
+async function stageTraffic(ctx: CoreContext, sc: StageContext): Promise<void> {
+  const { run, domain, log } = sc;
+  const provider = ctx.providers.dataforseo;
+  const step = await startStep(ctx.db, run.id, "traffic", provider.key, 1);
+
+  /** Records why no paid call was made and moves the run on. */
+  const skip = async (
+    outcome: string,
+    reason: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<void> => {
+    await completeStep(ctx.db, step, {
+      status: "skipped",
+      errorCode: (extra.errorCode as string | undefined) ?? null,
+      metadata: { outcome, reason, ...extra },
+    });
+    await advance(ctx, run, "traffic");
+  };
+
+  // 0. Cheapest possible exits, before touching the database for anything else. A batch of
+  //    150k domains must not pay four queries each for a provider that is switched off.
+  const runtimeState = provider.describeStatus().state;
+  if (runtimeState !== "ready") {
+    return skip(runtimeState, `provider ${runtimeState}`, {
+      blockedBy: "provider_state",
+      errorCode:
+        runtimeState === "not_configured" ? "PROVIDER_NOT_CONFIGURED" : "PROVIDER_DISABLED",
+    });
+  }
+  const settings = await getTrafficGateSettings(ctx.db);
+  if (!settings.enabled && !run.forceDeep) {
+    return skip("gate_denied", "automatic traffic lookups are disabled in settings", {
+      blockedBy: "gate_enabled",
+    });
+  }
+
+  // 1. Fresh data already on file — the cheapest possible outcome.
+  if (!run.forceRefresh) {
+    const fresh = await freshProviderObservations(ctx.db, domain.id, provider.key);
+    if (fresh) {
+      await completeStep(ctx.db, step, {
+        status: "completed",
+        metadata: {
+          outcome: "reused",
+          observations: fresh.length,
+          reusedFrom: fresh[0]?.analysisRunId ?? null,
+        },
+      });
+      await syncSummaryFromProvider(ctx.db, domain.id, provider.key, toMetricContext(fresh));
+      await advance(ctx, run, "traffic");
+      return;
+    }
+
+    // 2. Cooldown: expired data still means we asked recently. Do not pay twice for it.
+    if (settings.reuseWithinDays > 0) {
+      const lastAt = await latestProviderObservationAt(ctx.db, domain.id, provider.key);
+      const cooldownMs = settings.reuseWithinDays * 24 * 3600 * 1000;
+      if (lastAt && Date.now() - lastAt.getTime() < cooldownMs) {
+        return skip(
+          "cooldown",
+          `measured ${lastAt.toISOString().slice(0, 10)}, cooldown ${settings.reuseWithinDays}d`,
+          { blockedBy: "cooldown" },
+        );
+      }
+    }
+  }
+
+  // 3. Free qualification gate: name shape and network evidence. Nothing but observations the
+  //    pipeline already has, so a rejected domain costs no extra query.
+  const runRow = await requireRun(ctx.db, run.id);
+  const summary = runRow.summaryJson as { candidateGatePassed?: boolean };
+  const metrics = toMetricContext(await latestObservations(ctx.db, domain.id));
+  const providerState = await registryEnabledState(ctx, runtimeState);
+  const qualification = evaluateTrafficQualification({
+    settings,
+    metrics,
+    domain: { asciiFqdn: domain.asciiFqdn, tld: domain.tld },
+    candidateGatePassed: summary.candidateGatePassed ?? null,
+    providerState,
+  });
+  const qualified = decideTrafficGate(qualification, { forced: run.forceDeep });
+  if (!qualified.eligible) return recordDenial(ctx, sc, skip, qualified);
+
+  // 4. Volume and money caps. Only now is it worth aggregating the ledger.
+  const counters = await providerCallCounters(ctx.db, provider.key, {
+    sourceBatchId: run.sourceBatchId,
+  });
+  const estimate = await provider.estimate({
+    domain: providerDomain(domain),
+    analysisRunId: run.id,
+  });
+  // The balance lookup is free and cached, but only worth making when it can block a call.
+  let accountBalanceUsd: number | null = null;
+  if (settings.minAccountBalanceUsd > 0) {
+    try {
+      accountBalanceUsd = (await provider.accountBalance()).balanceUsd;
+    } catch (error) {
+      log.warn({ err: error }, "could not read the provider account balance");
+    }
+  }
+  const decision = decideTrafficGate(
+    [
+      ...qualification,
+      ...evaluateTrafficBudget({
+        settings,
+        counters,
+        envMonthlyCostBudgetUsd: ctx.dataforseo.DATAFORSEO_MONTHLY_COST_BUDGET_USD ?? null,
+        estimatedCallCostUsd: estimate.estimatedCostUsd,
+        accountBalanceUsd,
+      }),
+    ],
+    { forced: run.forceDeep },
+  );
+  if (!decision.eligible) return recordDenial(ctx, sc, skip, decision);
+  await recordGateDecision(ctx, sc, decision);
+
+  // 5. Spend.
+  const result = await provider.enrich({
+    domain: providerDomain(domain),
+    analysisRunId: run.id,
+    force: run.forceRefresh,
+  });
+  await persistProviderResult(ctx, sc, step, result);
+  log.info(
+    { costUsd: result.requests[0]?.estimatedCostUsd ?? 0, status: result.status },
+    "traffic lookup done",
+  );
+  await advance(ctx, run, "traffic");
+}
+
+/**
+ * An admin can also switch the provider off from the Providers page without a redeploy, which
+ * costs one indexed lookup. Only asked once the runtime configuration already said "ready".
+ */
+async function registryEnabledState(ctx: CoreContext, runtimeState: string): Promise<string> {
+  if (runtimeState !== "ready") return runtimeState;
+  const row = await ctx.db.query.providers.findFirst({
+    where: eq(providers.key, PROVIDER_KEYS.DATAFORSEO),
+  });
+  return row?.enabled === false ? "disabled_in_registry" : runtimeState;
+}
+
+/** Records the gate decision as evidence on the run and on the domain. */
+async function recordGateDecision(
+  ctx: CoreContext,
+  sc: StageContext,
+  decision: TrafficGateDecision,
+): Promise<void> {
+  const { run, domain } = sc;
+  await ctx.db.transaction(async (tx) => {
+    await recordObservations(
+      tx,
+      { domainId: domain.id, analysisRunId: run.id, providerKey: "internal" },
+      [
+        measuredObservation("internal.traffic_gate_passed", decision.eligible, {
+          licenseClass: "internal",
+          ttlHours: null,
+          metadata: { blockedBy: decision.blockedBy, reasons: decision.reasons },
+        }),
+      ],
+    );
+    await mergeRunSummary(tx, run.id, {
+      trafficGatePassed: decision.eligible,
+      trafficGateBlockedBy: decision.blockedBy,
+      trafficGateReasons: decision.reasons,
+    });
+  });
+}
+
+async function recordDenial(
+  ctx: CoreContext,
+  sc: StageContext,
+  skip: (outcome: string, reason: string, extra?: Record<string, unknown>) => Promise<void>,
+  decision: TrafficGateDecision,
+): Promise<void> {
+  await recordGateDecision(ctx, sc, decision);
+  sc.log.info(
+    { blockedBy: decision.blockedBy },
+    "traffic lookup skipped by the free qualification gate",
+  );
+  await skip("gate_denied", decision.reasons.join("; "), {
+    blockedBy: decision.blockedBy,
+    checks: decision.checks,
+    errorCode: decision.blockedBy === "monthly_budget" ? "PROVIDER_BUDGET_EXHAUSTED" : undefined,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Stage F — rules
 // ---------------------------------------------------------------------------
 async function stageRules(ctx: CoreContext, sc: StageContext): Promise<void> {
@@ -715,10 +942,13 @@ async function stageScore(ctx: CoreContext, sc: StageContext): Promise<void> {
                   : "measured";
       return { providerKey: s.providerKey!, outcome, reason: meta.reason };
     });
-  const seoStep = steps.find((s) => s.stepKey === "seo");
-  const deepSkipped =
-    seoStep?.status === "skipped" &&
-    /gate|budget/.test(String((seoStep.metadataJson as { reason?: string }).reason ?? ""));
+  const skippedByGateOrBudget = (stepKey: string): boolean => {
+    const step = steps.find((s) => s.stepKey === stepKey);
+    if (step?.status !== "skipped") return false;
+    const meta = step.metadataJson as { reason?: string; blockedBy?: string };
+    return /gate|budget|cap|cooldown/.test(`${meta.reason ?? ""} ${meta.blockedBy ?? ""}`);
+  };
+  const deepSkipped = skippedByGateOrBudget("seo") || skippedByGateOrBudget("traffic");
   const metrics = toMetricContext(await latestObservations(ctx.db, domain.id));
   const fromReleaseList = await isFromReleaseList(ctx.db, run);
   const result = computeScores(model, {

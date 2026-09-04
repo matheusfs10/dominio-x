@@ -28,7 +28,12 @@ async function main() {
   const connection = redisConnectionOptions(config.REDIS_URL);
   const queues = createQueues(connection);
   const storage = createObjectStorage(config);
-  const providers = createProviderRegistry({ pipeline: config, semrush: config, redis });
+  const providers = createProviderRegistry({
+    pipeline: config,
+    semrush: config,
+    dataforseo: config,
+    redis,
+  });
   const core: CoreContext = {
     db: database.db,
     storage,
@@ -36,6 +41,7 @@ async function main() {
     providers,
     pipeline: config,
     semrush: config,
+    dataforseo: config,
     logger,
   };
 
@@ -43,7 +49,9 @@ async function main() {
     const concurrency =
       stage === "seo"
         ? Math.min(config.PIPELINE_WORKER_CONCURRENCY, config.SEMRUSH_MAX_CONCURRENCY)
-        : config.PIPELINE_WORKER_CONCURRENCY;
+        : stage === "traffic"
+          ? Math.min(config.PIPELINE_WORKER_CONCURRENCY, config.DATAFORSEO_MAX_CONCURRENCY)
+          : config.PIPELINE_WORKER_CONCURRENCY;
     const worker = createStageWorker(
       stage,
       async (job) => {
@@ -88,6 +96,7 @@ async function main() {
       concurrency: config.PIPELINE_WORKER_CONCURRENCY,
       crawler: config.CRAWLER_ENABLED,
       semrush: providers.semrush.describeStatus().state,
+      dataforseo: providers.dataforseo.describeStatus().state,
     },
     "worker started",
   );

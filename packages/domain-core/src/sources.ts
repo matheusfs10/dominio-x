@@ -397,6 +397,8 @@ export interface BatchFunnel {
   needsReview: number;
   gatePassed: number;
   paidAnalyzed: number;
+  /** Domains of this batch for which a paid traffic lookup was actually made. */
+  trafficLookedUp: number;
   highPotential: number;
   shortlisted: number;
 }
@@ -436,6 +438,19 @@ export async function getBatchDetail(db: Db, batchId: string) {
       ),
     );
 
+  const [traffic] = await db
+    .select({ n: sql<number>`count(distinct ${analysisRuns.domainId})::int` })
+    .from(analysisSteps)
+    .innerJoin(analysisRuns, eq(analysisRuns.id, analysisSteps.analysisRunId))
+    .where(
+      and(
+        eq(analysisRuns.sourceBatchId, batchId),
+        eq(analysisSteps.stepKey, "traffic"),
+        eq(analysisSteps.status, "completed"),
+        sql`${analysisSteps.metadataJson}->>'outcome' = 'measured'`,
+      ),
+    );
+
   const [summaryCounts] = await db
     .select({
       rejected: sql<number>`count(*) filter (where ${domainSummaries.disposition} = 'rejected')::int`,
@@ -462,6 +477,7 @@ export async function getBatchDetail(db: Db, batchId: string) {
     needsReview: summaryCounts?.needsReview ?? 0,
     gatePassed: runCounts?.gatePassed ?? 0,
     paidAnalyzed: paid?.n ?? 0,
+    trafficLookedUp: traffic?.n ?? 0,
     highPotential: summaryCounts?.highPotential ?? 0,
     shortlisted: summaryCounts?.shortlisted ?? 0,
   };

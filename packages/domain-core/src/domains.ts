@@ -145,6 +145,7 @@ const SORT_COLUMNS = {
   name_score: domainSummaries.nameScore,
   seo_score: domainSummaries.seoScore,
   risk_score: domainSummaries.riskScore,
+  traffic_visits: domainSummaries.trafficVisitsTotal,
 } as const;
 
 export async function listDomains(db: Db, query: ListDomainsQuery): Promise<Page<DomainListItem>> {
@@ -187,6 +188,10 @@ export async function listDomains(db: Db, query: ListDomainsQuery): Promise<Page
   if (query.maxLength !== undefined)
     conditions.push(lte(domainSummaries.fqdnLength, query.maxLength));
   if (query.hasSeo !== undefined) conditions.push(eq(domainSummaries.hasSeoData, query.hasSeo));
+  if (query.hasTraffic !== undefined)
+    conditions.push(eq(domainSummaries.hasTrafficData, query.hasTraffic));
+  if (query.minVisits !== undefined)
+    conditions.push(gte(domainSummaries.trafficVisitsTotal, query.minVisits));
   if (query.hasDns !== undefined) conditions.push(eq(domainSummaries.dnsResolves, query.hasDns));
   if (query.httpStatus !== undefined)
     conditions.push(eq(domainSummaries.httpStatus, query.httpStatus));
@@ -260,6 +265,8 @@ export async function listDomains(db: Db, query: ListDomainsQuery): Promise<Page
           return last.summary?.seoScore ?? null;
         case "risk_score":
           return last.summary?.riskScore ?? null;
+        case "traffic_visits":
+          return last.summary?.trafficVisitsTotal ?? null;
       }
     })();
     nextCursor = encodeCursor({ v: raw, id: last.domain.id });

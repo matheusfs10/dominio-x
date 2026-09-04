@@ -84,6 +84,22 @@ export const SEED_PROVIDERS = [
       note: "Integration mode (official API vs alternative) not yet decided.",
     },
   },
+  {
+    key: PROVIDER_KEYS.DATAFORSEO,
+    name: "DataForSEO (tráfego estimado de busca)",
+    enabled: true,
+    paid: true,
+    capabilities: ["traffic"],
+    rateLimitRps: 2,
+    concurrencyLimit: 2,
+    timeoutMs: 20_000,
+    defaultTtlHours: 24 * 30,
+    retentionPolicy: "provider_restricted",
+    configJson: {
+      endpoint: "dataforseo_labs.historical_bulk_traffic_estimation",
+      note: "Runs only behind the free traffic gate (Settings > Gate de tráfego). Cost is read from the provider response.",
+    },
+  },
 ];
 
 export const SEED_SCORE_MODEL_V1 = {
@@ -101,6 +117,17 @@ export const SEED_SCORE_MODEL_V1 = {
     riskPenaltyFactor: 0.35,
     expectedDimensions: ["name", "brand", "seo", "link", "history", "commercial", "risk"],
   },
+};
+
+/**
+ * Same weights as v1, but with the paid traffic estimates feeding the SEO dimension. Seeded as a
+ * DRAFT: activating it changes how every future run is scored, which is the operator's call.
+ */
+export const SEED_SCORE_MODEL_V2 = {
+  name: "Transparent weighted v2 (com tráfego estimado)",
+  version: 2,
+  weightsJson: SEED_SCORE_MODEL_V1.weightsJson,
+  configJson: { ...SEED_SCORE_MODEL_V1.configJson, useTrafficSignals: true },
 };
 
 export const SEED_RULESET_V1 = {
@@ -201,6 +228,31 @@ export const SEED_RULESET_V1 = {
 };
 
 export const SEED_SETTINGS = {
+  /**
+   * Free qualification policy for the paid traffic provider. Deliberately strict and with the
+   * automatic lookup switched OFF: the operator turns it on after reviewing the thresholds.
+   */
+  traffic_gate: {
+    enabled: false,
+    maxDigits: 0,
+    maxHyphens: 1,
+    minSldLength: 3,
+    maxSldLength: 20,
+    maxRandomness: 0.6,
+    allowPunycode: false,
+    requireDictionaryToken: false,
+    allowedTlds: ["com.br", "br"],
+    requireDnsResolution: true,
+    requireHttpReachable: false,
+    allowedHttpStatuses: [],
+    requireCandidateGate: true,
+    reuseWithinDays: 30,
+    maxLookupsPerBatch: 50,
+    maxLookupsPerDay: 200,
+    maxLookupsPerMonth: 2000,
+    monthlyCostBudgetUsd: 20,
+    minAccountBalanceUsd: 0,
+  },
   candidate_gate: {
     enabled: true,
     maxSldLength: 20,

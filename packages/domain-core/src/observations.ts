@@ -166,6 +166,26 @@ export async function freshProviderObservations(
   return fresh ? rows : null;
 }
 
+/** When this provider last wrote an observation for the domain (any state). */
+export async function latestProviderObservationAt(
+  db: DbOrTx,
+  domainId: string,
+  providerKey: string,
+): Promise<Date | null> {
+  const [row] = await db
+    .select({ observedAt: domainObservations.observedAt })
+    .from(domainObservations)
+    .where(
+      and(
+        eq(domainObservations.domainId, domainId),
+        eq(domainObservations.providerKey, providerKey),
+      ),
+    )
+    .orderBy(desc(domainObservations.observedAt))
+    .limit(1);
+  return row?.observedAt ?? null;
+}
+
 export async function listObservationsForDomain(
   db: DbOrTx,
   domainId: string,

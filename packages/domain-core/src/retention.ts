@@ -1,9 +1,17 @@
 import { and, inArray, isNull, lt, sql } from "drizzle-orm";
-import { crawlerJobs, domainObservations, operationalEvents, type Db } from "@dominio-x/database";
+import {
+  crawlerJobs,
+  domainObservations,
+  domainSummaries,
+  operationalEvents,
+  type Db,
+} from "@dominio-x/database";
 import { deleteExpiredSessions } from "./auth.js";
 
 export interface RetentionReport {
   purgedRestrictedObservations: number;
+  /** Domains whose mirrored traffic values were cleared from the summary cache. */
+  clearedTrafficSummaries: number;
   deletedSessions: number;
   deletedOperationalEvents: number;
   deletedCrawlerJobs: number;
@@ -13,6 +21,8 @@ export interface RetentionReport {
  * Retention routine (safe to run repeatedly):
  * - provider-restricted observation VALUES older than the configured retention are removed,
  *   while the row (provider, metric, timestamp, state) is kept for audit;
+ * - the paid values mirrored into `domain_summaries` (a rebuildable cache used by the explorer)
+ *   are cleared for the same domains, so no provider value outlives its observation;
  * - expired sessions, old operational events and finished crawler jobs are deleted.
  */
 export async function runRetention(
@@ -46,7 +56,35 @@ export async function runRetention(
         isNull(domainObservations.purgedAt),
       ),
     )
-    .returning({ id: domainObservations.id });
+    .returning({
+      id: domainObservations.id,
+      domainId: domainObservations.domainId,
+      metricKey: domainObservations.metricKey,
+    });
+
+  // The summary table caches a few paid values so the explorer can sort and filter on them.
+  // They are provider data and must disappear with the observation they came from.
+  const affected = [
+    ...new Set(
+      purged.filter((row) => row.metricKey.startsWith("traffic.")).map((row) => row.domainId),
+    ),
+  ];
+  let clearedTrafficSummaries = 0;
+  for (let i = 0; i < affected.length; i += 500) {
+    const cleared = await db
+      .update(domainSummaries)
+      .set({
+        trafficVisitsTotal: null,
+        trafficVisitsLastMonth: null,
+        trafficTrendRatio: null,
+        hasTrafficData: null,
+        updatedAt: now,
+      })
+      .where(inArray(domainSummaries.domainId, affected.slice(i, i + 500)))
+      .returning({ domainId: domainSummaries.domainId });
+    clearedTrafficSummaries += cleared.length;
+  }
+
   const deletedSessions = await deleteExpiredSessions(db);
   const eventsCutoff = new Date(
     now.getTime() - (options.operationalEventDays ?? 30) * 24 * 3600 * 1000,
@@ -67,6 +105,7 @@ export async function runRetention(
     .returning({ id: crawlerJobs.id });
   return {
     purgedRestrictedObservations: purged.length,
+    clearedTrafficSummaries,
     deletedSessions,
     deletedOperationalEvents: events.length,
     deletedCrawlerJobs: jobs.length,

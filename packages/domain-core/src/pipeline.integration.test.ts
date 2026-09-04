@@ -112,6 +112,7 @@ describe("domain-core pipeline (integration)", () => {
       "crawl",
       "candidate_gate",
       "seo",
+      "traffic",
       "rules",
       "score",
       "complete",
@@ -127,6 +128,9 @@ describe("domain-core pipeline (integration)", () => {
     expect(byKey.crawl?.status).toBe("skipped");
     expect(byKey.seo?.status).toBe("skipped");
     expect((byKey.seo?.metadataJson as { outcome: string }).outcome).toBe("decision_pending");
+    // The paid traffic provider is unconfigured in tests: the gate must refuse before any call.
+    expect(byKey.traffic?.status).toBe("skipped");
+    expect((byKey.traffic?.metadataJson as { blockedBy: string }).blockedBy).toBe("provider_state");
     expect((byKey.candidate_gate?.metadataJson as { outcome: string }).outcome).toBe("passed");
 
     const score = await tdb.db.query.domainScores.findFirst({
@@ -398,12 +402,34 @@ describe("domain-core pipeline (integration)", () => {
         licenseClass: "provider_restricted",
         observedAt: new Date(Date.now() - 40 * 24 * 3600 * 1000),
       });
+    // Paid traffic values are mirrored into the summary cache; retention must clear both.
+    await tdb.db.insert(domainObservations).values({
+      domainId: domain.id,
+      providerKey: "dataforseo",
+      metricKey: "traffic.visits_total",
+      valueType: "numeric",
+      valueNumeric: 1040,
+      state: "measured",
+      licenseClass: "provider_restricted",
+      observedAt: new Date(Date.now() - 40 * 24 * 3600 * 1000),
+    });
+    await tdb.db
+      .update(domainSummaries)
+      .set({ trafficVisitsTotal: 1040, hasTrafficData: true })
+      .where(eq(domainSummaries.domainId, domain.id));
+
     const report = await runRetention(tdb.db, { restrictedRetentionDays: 30 });
-    expect(report.purgedRestrictedObservations).toBe(1);
+    expect(report.purgedRestrictedObservations).toBe(2);
+    expect(report.clearedTrafficSummaries).toBe(1);
     const purged = await tdb.db.query.domainObservations.findFirst({
       where: eq(domainObservations.metricKey, "seo.authority"),
     });
     expect(purged?.valueNumeric).toBeNull();
     expect(purged?.purgedAt).not.toBeNull();
+    const cachedSummary = await tdb.db.query.domainSummaries.findFirst({
+      where: eq(domainSummaries.domainId, domain.id),
+    });
+    expect(cachedSummary?.trafficVisitsTotal).toBeNull();
+    expect(cachedSummary?.hasTrafficData).toBeNull();
   });
 });

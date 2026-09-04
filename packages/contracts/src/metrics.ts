@@ -65,6 +65,24 @@ export const METRICS = {
   SEO_AUTHORITY: "seo.authority",
   LINKS_REFERRING_DOMAINS: "links.referring_domains",
   LINKS_BACKLINKS: "links.backlinks",
+
+  // Estimated search traffic for one location over a rolling window (paid providers, e.g. DataForSEO).
+  // These are *estimates derived from SERP position x search volume*, not analytics visits.
+  TRAFFIC_WINDOW_MONTHS: "traffic.window_months",
+  TRAFFIC_WINDOW_FROM: "traffic.window_from",
+  TRAFFIC_WINDOW_TO: "traffic.window_to",
+  TRAFFIC_LOCATION_CODE: "traffic.location_code",
+  TRAFFIC_LOCATION_NAME: "traffic.location_name",
+  TRAFFIC_HAS_DATA: "traffic.has_data",
+  TRAFFIC_VISITS_TOTAL: "traffic.visits_total",
+  TRAFFIC_VISITS_MONTHLY_AVG: "traffic.visits_monthly_avg",
+  TRAFFIC_VISITS_LAST_MONTH: "traffic.visits_last_month",
+  TRAFFIC_VISITS_PEAK_MONTH: "traffic.visits_peak_month",
+  TRAFFIC_MONTHS_WITH_TRAFFIC: "traffic.months_with_traffic",
+  TRAFFIC_TREND_RATIO: "traffic.trend_ratio",
+  TRAFFIC_PAID_VISITS_TOTAL: "traffic.paid_visits_total",
+  TRAFFIC_SERP_COUNT_LAST_MONTH: "traffic.serp_count_last_month",
+  TRAFFIC_MONTHLY_SERIES: "traffic.monthly_series",
 } as const;
 
 export type MetricKey = (typeof METRICS)[keyof typeof METRICS];
@@ -72,7 +90,7 @@ export type MetricKey = (typeof METRICS)[keyof typeof METRICS];
 export const METRIC_KEYS: readonly MetricKey[] = Object.values(METRICS);
 
 /** Metrics that come from paid / provider-restricted sources. */
-export const PAID_METRIC_PREFIXES = ["seo.", "links."] as const;
+export const PAID_METRIC_PREFIXES = ["seo.", "links.", "traffic."] as const;
 
 export const SEO_METRIC_KEYS: readonly MetricKey[] = [
   METRICS.SEO_ORGANIC_KEYWORDS,
@@ -82,4 +100,26 @@ export const SEO_METRIC_KEYS: readonly MetricKey[] = [
   METRICS.SEO_AUTHORITY,
   METRICS.LINKS_REFERRING_DOMAINS,
   METRICS.LINKS_BACKLINKS,
+];
+
+/**
+ * Location-scoped traffic metrics. `traffic.*` values only describe the location recorded in
+ * `traffic.location_code`; comparing them across locations is meaningless.
+ */
+export const TRAFFIC_METRIC_KEYS: readonly MetricKey[] = [
+  METRICS.TRAFFIC_WINDOW_MONTHS,
+  METRICS.TRAFFIC_WINDOW_FROM,
+  METRICS.TRAFFIC_WINDOW_TO,
+  METRICS.TRAFFIC_LOCATION_CODE,
+  METRICS.TRAFFIC_LOCATION_NAME,
+  METRICS.TRAFFIC_HAS_DATA,
+  METRICS.TRAFFIC_VISITS_TOTAL,
+  METRICS.TRAFFIC_VISITS_MONTHLY_AVG,
+  METRICS.TRAFFIC_VISITS_LAST_MONTH,
+  METRICS.TRAFFIC_VISITS_PEAK_MONTH,
+  METRICS.TRAFFIC_MONTHS_WITH_TRAFFIC,
+  METRICS.TRAFFIC_TREND_RATIO,
+  METRICS.TRAFFIC_PAID_VISITS_TOTAL,
+  METRICS.TRAFFIC_SERP_COUNT_LAST_MONTH,
+  METRICS.TRAFFIC_MONTHLY_SERIES,
 ];

@@ -55,6 +55,7 @@ export const PIPELINE_STAGES = [
   "crawl",
   "candidate_gate",
   "seo",
+  "traffic",
   "rules",
   "score",
   "complete",
@@ -81,6 +82,7 @@ export const PROVIDER_KEYS = {
   RDAP: "rdap",
   CRAWLER: "crawler",
   SEMRUSH: "semrush",
+  DATAFORSEO: "dataforseo",
 } as const;
 export type ProviderKey = (typeof PROVIDER_KEYS)[keyof typeof PROVIDER_KEYS];
 
@@ -207,8 +209,9 @@ export const AUDIT_ACTIONS = [
   "shortlist.domain_removed",
   "provider.updated",
   "settings.updated",
+  "domain.traffic_lookup_requested",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 export const NORMALIZATION_VERSION = 1;
-export const PIPELINE_VERSION = "1.0.0";
+export const PIPELINE_VERSION = "1.1.0";
