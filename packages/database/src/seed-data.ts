@@ -823,14 +823,22 @@ export const CONTENT_BLOCK_RULES = [
 ];
 
 /**
- * Ruleset v2 = the conservative v1 rules plus the content-category blocks. Seeded as a DRAFT:
- * activating it changes dispositions for every future run, so it is the operator's call.
+ * Identity of the content ruleset. Version numbers are handed out by `nextVersion()` whenever an
+ * analyst creates or clones a ruleset through the UI, so a seeded ruleset must never be
+ * recognised by its version: the seed would silently skip itself the moment an analyst happened
+ * to occupy that number. This rule key is the marker instead.
  */
-export const SEED_RULESET_V2 = {
-  name: "Conservative defaults v2 (bloqueio de jogo e conteudo adulto)",
-  version: 2,
+export const CONTENT_RULESET_MARKER_KEY = "content.gambling.bet_numeric";
+
+/**
+ * The conservative v1 rules plus the content-category blocks. Seeded as a DRAFT at whatever the
+ * next free version is: activating it changes dispositions for every future run, so it is the
+ * operator's call.
+ */
+export const SEED_CONTENT_RULESET = {
+  name: "Bloqueio de jogo de azar e conteudo adulto",
   description:
-    "v1 mais bloqueio automatico de dominios de jogo de azar/apostas/cassino e de conteudo adulto, com whitelist de falso-positivo por regra.",
+    "Regras do v1 mais bloqueio automatico de dominios de jogo de azar/apostas/cassino e de conteudo adulto, com whitelist de falso-positivo por regra.",
   rules: [...SEED_RULESET_V1.rules, ...CONTENT_BLOCK_RULES],
 };
 

@@ -1,4 +1,4 @@
-import { count, eq } from "drizzle-orm";
+import { count, eq, max } from "drizzle-orm";
 import { normalizeDomain } from "@dominio-x/normalization";
 import type { Db } from "./client.js";
 import { hashPassword } from "./password.js";
@@ -6,7 +6,8 @@ import {
   DEV_SAMPLE_DOMAINS,
   SEED_PROVIDERS,
   SEED_RULESET_V1,
-  SEED_RULESET_V2,
+  CONTENT_RULESET_MARKER_KEY,
+  SEED_CONTENT_RULESET,
   SEED_SCORE_MODEL_V1,
   SEED_SCORE_MODEL_V2,
   SEED_SETTINGS,
@@ -163,14 +164,24 @@ export async function seedDatabase(db: Db, options: SeedOptions = {}): Promise<S
     return true;
   };
 
-  if (await seedRuleset(SEED_RULESET_V1, "active")) {
+  if (await seedRuleset({ ...SEED_RULESET_V1, version: SEED_RULESET_V1.version }, "active")) {
     report.rulesetCreated = true;
     log("ruleset v1 created and activated");
   }
-  if (await seedRuleset(SEED_RULESET_V2, "draft")) {
+
+  // The content ruleset is recognised by a marker rule key, never by a version number: analysts
+  // create and clone rulesets through the UI, and `nextVersion()` would hand out the number this
+  // seed expects, making it skip itself in silence.
+  const contentAlreadySeeded = await db.query.rules.findFirst({
+    where: eq(rules.key, CONTENT_RULESET_MARKER_KEY),
+  });
+  if (!contentAlreadySeeded) {
+    const [highest] = await db.select({ v: max(rulesets.version) }).from(rulesets);
+    const version = (highest?.v ?? 0) + 1;
+    await seedRuleset({ ...SEED_CONTENT_RULESET, version }, "draft");
     // Draft on purpose: activating it starts rejecting gambling/adult domains automatically.
     log(
-      `ruleset v2 created as draft (${SEED_RULESET_V2.rules.length} rules, content blocks included; activate it when ready)`,
+      `content ruleset created as draft v${version} (${SEED_CONTENT_RULESET.rules.length} rules; activate it when ready)`,
     );
   }
 

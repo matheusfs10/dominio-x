@@ -60,9 +60,15 @@ Casos deliberadamente **não** bloqueados, só sinalizados: `vazados` (quase cer
 
 ## Ativação
 
-O v2 é semeado como **rascunho**. Ativá-lo muda a disposição de toda análise futura, então é decisão
-do operador: Regras → ruleset v2 → Ativar (ou `POST /v1/rulesets/{id}/activate`). O v1 fica arquivado
-e pode ser reativado.
+O ruleset de conteúdo é semeado como **rascunho**, com o nome "Bloqueio de jogo de azar e conteudo
+adulto". Ativá-lo muda a disposição de toda análise futura, então é decisão do operador:
+Regras → esse ruleset → Ativar (ou `POST /v1/rulesets/{id}/activate`). O anterior fica arquivado e
+pode ser reativado.
+
+O **número da versão dele não é fixo**. Analistas criam e clonam rulesets pela UI, e `nextVersion()`
+distribui `max(version) + 1` — se o seed procurasse pela versão 2, bastaria alguém ter criado um
+rascunho antes para o seed se pular em silêncio e as regras nunca existirem. Por isso a identidade
+é a chave de regra `content.gambling.bet_numeric`, e a versão é a primeira livre no momento do seed.
 
 ## Atenção: domínios já analisados
 

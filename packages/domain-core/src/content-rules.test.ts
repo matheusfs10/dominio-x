@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { SEED_RULESET_V2 } from "@dominio-x/database";
+import { SEED_CONTENT_RULESET } from "@dominio-x/database";
 import { normalizeDomain } from "@dominio-x/normalization";
 import { LexicalProvider } from "@dominio-x/providers";
 import {
@@ -22,8 +22,8 @@ const provider = new LexicalProvider();
 beforeAll(() => {
   const compiled = compileRuleset({
     id: "test",
-    version: SEED_RULESET_V2.version,
-    rules: SEED_RULESET_V2.rules.map((r, i) => ({
+    version: 2,
+    rules: SEED_CONTENT_RULESET.rules.map((r, i) => ({
       id: `r${i}`,
       key: r.key,
       name: r.name,
@@ -263,7 +263,7 @@ const WHITELIST = [
 
 describe("content-blocking ruleset v2", () => {
   it("compiles within the DSL limits", () => {
-    expect(ruleset.rules.length).toBe(SEED_RULESET_V2.rules.length);
+    expect(ruleset.rules.length).toBe(SEED_CONTENT_RULESET.rules.length);
   });
 
   it.each(GAMBLING)("blocks the gambling domain %s", async (name) => {
