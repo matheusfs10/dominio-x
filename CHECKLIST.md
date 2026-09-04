@@ -83,6 +83,11 @@ Legend: [x] done · [~] partial / blocked · [ ] not started
 - [ ] Verificação em produção com credenciais reais (aguarda o operador definir os limites e ligar
       `DATAFORSEO_ENABLED`)
 
+## Quality gates (local + CI, 2026-09-04)
+- [x] `pnpm lint` · `pnpm typecheck` (19/19) · `pnpm test` (160 passed, 2 skipped without Redis) ·
+      `pnpm build` (6/6) · `pnpm db:generate` reports no schema drift
+- [x] GitHub Actions green on `claude/dataforseo-visitor-analysis-8f74df`
+
 ## Quality gates (local, 2026-09-02)
 - [x] `pnpm lint` · `pnpm typecheck` · `pnpm test` (135 tests: unit + integration incl. API, pipeline, SSRF) · `pnpm build`
 - [x] Playwright critical flow passes against the local full stack (`E2E=1 node scripts/local-stack.mjs`)
