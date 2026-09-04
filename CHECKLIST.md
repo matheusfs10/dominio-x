@@ -83,6 +83,18 @@ Legend: [x] done · [~] partial / blocked · [ ] not started
 - [ ] Verificação em produção com credenciais reais (aguarda o operador definir os limites e ligar
       `DATAFORSEO_ENABLED`)
 
+## M12 — Bloqueio por categoria de conteúdo
+- [x] Superfícies normalizadas de matching no provedor lexical (`sld_ascii`, `sld_leet`, `sld_words`),
+      com mapeamento leet para evasão e dígitos preservados onde a assinatura depende deles
+- [x] 32 regras de bloqueio (jogo de azar/apostas/cassino e conteúdo adulto) no DSL versionado,
+      com whitelist de falso-positivo por regra via `{ not: ... }` (RE2 não tem lookahead)
+- [x] Confiança mapeada em ação: `reject` (alto) · `candidate_deny` (médio) · `tag` (baixo)
+- [x] Ruleset v2 semeado como **rascunho**; v1 segue ativo até o operador decidir
+- [x] 176 casos de teste com as amostras reais da lista do Registro.br (63 jogo + 42 adulto
+      bloqueados, 67 palavras da whitelist intactas)
+- [x] `docs/content-rules.md` — política, superfícies, limites do DSL e procedimento de ativação
+- [ ] Reanálise do acervo já ingerido para aplicar as regras aos 158.227 domínios (decisão do operador)
+
 ## Quality gates (local + CI, 2026-09-04)
 - [x] `pnpm lint` · `pnpm typecheck` (19/19) · `pnpm test` (160 passed, 2 skipped without Redis) ·
       `pnpm build` (6/6) · `pnpm db:generate` reports no schema drift

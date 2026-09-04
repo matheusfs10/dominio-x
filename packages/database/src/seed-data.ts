@@ -227,6 +227,613 @@ export const SEED_RULESET_V1 = {
   ],
 };
 
+/**
+ * Content-category blocks (gambling and adult), from the operator's specification.
+ *
+ * Matching contract: every pattern runs against a pre-normalized surface emitted by the lexical
+ * provider — lower-cased, accent-stripped, separators removed. `sld_leet` additionally maps
+ * 0134 57 onto oiea st, which catches evasion ("cass1no") for free; digit-bearing patterns use
+ * `sld_ascii` instead, because leet mapping would eat the digits. False-positive lists are
+ * expressed as `not` conditions on `sld_ascii`, since RE2 has no lookahead.
+ *
+ * Confidence maps onto the action:
+ *   reject         — unambiguous term or known brand; also denies the paid lookup, because a
+ *                    rejected disposition sets `candidateDecision = "deny"`
+ *   candidate_deny — blocks the paid lookup and stays visible for review; disposition untouched
+ *   tag            — ambiguous single word: flags for manual review, blocks nothing
+ *
+ * Every match is recorded in `rule_executions` with the rule key and the matched leaves, which
+ * is the audit trail for refining the whitelists.
+ */
+export const CONTENT_BLOCK_RULES = [
+  {
+    key: "content.gambling.bet_numeric",
+    name: "Aposta: bet colado a numero",
+    description:
+      "Assinatura numero 1 de registro em massa nas listas de liberacao: 188bet, bet365, 777bet.",
+    category: "reputation",
+    priority: 20,
+    reasonCode: "GAMBLING_BET_NUMERIC",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_ASCII,
+      op: "matches_safe_regex",
+      value: "[0-9]bet|bet[0-9]",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.gambling.bet_affix",
+    name: "Aposta: bet com afixo de marca",
+    description: "Prefixos e sufixos tipicos de casa de aposta colados a bet.",
+    category: "reputation",
+    priority: 21,
+    reasonCode: "GAMBLING_BET_AFFIX",
+    condition: {
+      all: [
+        {
+          metric: METRICS.LEXICAL_SLD_LEET,
+          op: "matches_safe_regex",
+          value:
+            "betcasino|betcassino|betsport|betsbr|betbr|brbet|betapp|betpix|betvip|betfast|betgame|betmax|betcopa|betao",
+        },
+        {
+          not: {
+            metric: METRICS.LEXICAL_SLD_ASCII,
+            op: "matches_safe_regex",
+            value:
+              "apostila|apostol|alphabet|betoneira|betim|betania|betesda|sherbet|sorbet|tibet|corbett|betterware",
+          },
+        },
+      ],
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.gambling.casino",
+    name: "Cassino",
+    description: "Cassino em PT, EN e grafias de evasao. Superficie leet pega cass1no e c4sino.",
+    category: "reputation",
+    priority: 22,
+    reasonCode: "GAMBLING_CASINO",
+    condition: {
+      all: [
+        {
+          metric: METRICS.LEXICAL_SLD_LEET,
+          op: "matches_safe_regex",
+          value: "cassino|casino|cazino|kassino|kazino|tragamoeda|cacaniquel",
+        },
+        {
+          not: {
+            metric: METRICS.LEXICAL_SLD_ASCII,
+            op: "matches_safe_regex",
+            value:
+              "praiadocassino|cassinors|bairrocassino|ferragemcassino|cassinonutricao|vivasemcassino|quebreocassino|semcassino|combateaojogo|jogadoresanonimos|dependenciadejogo",
+          },
+        },
+      ],
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.gambling.apostas",
+    name: "Apostas e palpites",
+    description:
+      "Nucleo do setor. apost[aoe] cobre aposta, aposto, aposte e apostou (japostouhoje) sem casar apostila nem apostolo.",
+    category: "reputation",
+    priority: 23,
+    reasonCode: "GAMBLING_APOSTAS",
+    condition: {
+      all: [
+        {
+          metric: METRICS.LEXICAL_SLD_LEET,
+          op: "matches_safe_regex",
+          value:
+            "apost[aoe]|palpite|prognostico|tipster|bilhetepremiado|batergreen|entradaconfirmada",
+        },
+        {
+          not: {
+            metric: METRICS.LEXICAL_SLD_ASCII,
+            op: "matches_safe_regex",
+            value:
+              "apostila|apostol|alphabet|betoneira|betim|betania|betesda|sherbet|sorbet|tibet|corbett|betterware",
+          },
+        },
+      ],
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.gambling.crash_games",
+    name: "Jogos crash e caca-niquel de marca",
+    description: "Tigrinho, Fortune*, Aviator e afins: nomes de jogos, sem ambiguidade.",
+    category: "reputation",
+    priority: 24,
+    reasonCode: "GAMBLING_CRASH_GAMES",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value:
+        "tigrinho|jogodotigre|fortunetiger|fortuneox|fortunerabbit|fortunemouse|fortunedragon|aviaozinho|spaceman|rocketman|plinko|sweetbonanza|gatesofolympus|gateofolympus|bigbass",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.gambling.bicho_rifa",
+    name: "Jogo do bicho e raspadinha",
+    description: "Loteria paralela e raspadinha online.",
+    category: "reputation",
+    priority: 25,
+    reasonCode: "GAMBLING_BICHO_RIFA",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value:
+        "jogodobicho|deunoposte|resultadodobicho|bancadebicho|raspadinha|raspaeganha|raspouganhou",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.gambling.jargon",
+    name: "Jargao de cassino online",
+    description: "Giros gratis, jackpot, provedores de jogo.",
+    category: "reputation",
+    priority: 26,
+    reasonCode: "GAMBLING_JARGON",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value:
+        "girosgratis|rodadasgratis|freespins|jackpot|rtpalto|pragmaticplay|pgsoft|hacksaw|spribe|dragontiger",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.gambling.brands_global",
+    name: "Marcas de aposta internacionais",
+    description: "Lista de bloqueio direto de marcas globais.",
+    category: "reputation",
+    priority: 27,
+    reasonCode: "GAMBLING_BRAND",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value:
+        "bet365|betano|betfair|sportingbet|betnacional|betsson|parimatch|1xbet|melbet|22bet|4rabet|mostbet|betwinner|1win|20bet|betmgm|lottoland",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.gambling.brands_br",
+    name: "Marcas de aposta brasileiras",
+    description: "Lista de bloqueio direto de marcas do mercado brasileiro.",
+    category: "reputation",
+    priority: 28,
+    reasonCode: "GAMBLING_BRAND",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value:
+        "pixbet|vaidebet|estrelabet|superbet|esportivabet|betpix365|br4bet|bravobet|hiperbet|luvabet|lampionsbet|tivobet|apostaganha|reidopitaco|betboom|f12bet",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.gambling.brands_more",
+    name: "Marcas de aposta e cassino (complemento)",
+    description: "Segunda metade da lista de marcas.",
+    category: "reputation",
+    priority: 29,
+    reasonCode: "GAMBLING_BRAND",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value:
+        "novibet|betwarrior|mcgames|jonbet|brazino|cassinopix|pagbet|h2bet|betgorillas|betdasorte|apostatudo|verabet|papigames|onabet|aajogo|betpp|bacanaplay|kto",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.gambling.brands_ambiguous",
+    name: "Marcas de aposta com risco de falso-positivo",
+    description: "Blaze e Stake sao palavras comuns; a whitelist remove blazer, ablaze e mistake.",
+    category: "reputation",
+    priority: 30,
+    reasonCode: "GAMBLING_BRAND",
+    condition: {
+      all: [
+        {
+          metric: METRICS.LEXICAL_SLD_LEET,
+          op: "matches_safe_regex",
+          value: "blaze|stake|brazino777",
+        },
+        {
+          not: {
+            metric: METRICS.LEXICAL_SLD_ASCII,
+            op: "matches_safe_regex",
+            value: "blazer|ablaze|mistake|stakeholder",
+          },
+        },
+      ],
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.gambling.easy_money",
+    name: "Metodo e robo de aposta",
+    description: "Promessa de ganho facil atrelada a jogo.",
+    category: "reputation",
+    priority: 31,
+    reasonCode: "GAMBLING_EASY_MONEY",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value:
+        "ganheapostando|lucrecomaposta|metodoroleta|metodotigrinho|robodeaposta|robotigrinho|sinaltigrinho|sinaisdeaposta|hacktigrinho|plataformadeaposta|saquenaposta",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.gambling.slots_context",
+    name: "Slots com contexto",
+    description:
+      "slot so bloqueia com contexto: slotscasino, 7slots. Whitelist tira timeslot e slotcar.",
+    category: "reputation",
+    priority: 40,
+    reasonCode: "GAMBLING_SLOTS_CONTEXT",
+    condition: {
+      all: [
+        {
+          metric: METRICS.LEXICAL_SLD_ASCII,
+          op: "matches_safe_regex",
+          value: "slotscasino|slotsbrasil|slotsonline|slotsbet|slotgame|[0-9]slots?",
+        },
+        {
+          not: {
+            metric: METRICS.LEXICAL_SLD_ASCII,
+            op: "matches_safe_regex",
+            value: "timeslot|slotcar|slotback|camslot",
+          },
+        },
+      ],
+    },
+    action: { type: "candidate_deny" },
+  },
+  {
+    key: "content.gambling.table_games",
+    name: "Jogos de mesa com contexto",
+    description: "Roleta e poker so com contexto; blackjack e baccarat sao inequivocos.",
+    category: "reputation",
+    priority: 41,
+    reasonCode: "GAMBLING_TABLE_GAMES",
+    condition: {
+      all: [
+        {
+          metric: METRICS.LEXICAL_SLD_LEET,
+          op: "matches_safe_regex",
+          value:
+            "roletaonline|roletabrasil|roletabet|roulette|blackjack|baccarat|pokeronline|texasholdem|dominoqq",
+        },
+        {
+          not: {
+            metric: METRICS.LEXICAL_SLD_ASCII,
+            op: "matches_safe_regex",
+            value: "roletaindustrial|roletamento|pokershop",
+          },
+        },
+      ],
+    },
+    action: { type: "candidate_deny" },
+  },
+  {
+    key: "content.gambling.mines_context",
+    name: "Mines com contexto de jogo",
+    description: "mines sozinho e falso-positivo (mineracao); exige contexto de jogo.",
+    category: "reputation",
+    priority: 42,
+    reasonCode: "GAMBLING_MINES_CONTEXT",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value: "minesjogo|minesgame|minesbet|jogodemines|minesaposta",
+    },
+    action: { type: "candidate_deny" },
+  },
+  {
+    key: "content.gambling.rifa_context",
+    name: "Rifa e bolao com contexto de aposta",
+    description: "Rifa beneficente e legitima; exige contexto comercial.",
+    category: "reputation",
+    priority: 43,
+    reasonCode: "GAMBLING_RIFA_CONTEXT",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value: "rifaonline|rifapremiada|rifadosorteio|rifavirtual|bolaodeaposta|bolaodacopa",
+    },
+    action: { type: "candidate_deny" },
+  },
+  {
+    key: "content.gambling.review",
+    name: "Termo de jogo ambiguo (revisao manual)",
+    description: "Palavra isolada e polissemica: sinaliza para revisao, nao bloqueia.",
+    category: "reputation",
+    priority: 60,
+    reasonCode: "GAMBLING_REVIEW",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_WORDS,
+      op: "matches_safe_regex",
+      value:
+        "\\bslots?\\b|\\broleta\\b|\\bodds?\\b|\\bpoker\\b|\\bbolao\\b|\\brifas?\\b|\\bmines\\b|\\bdouble\\b",
+    },
+    action: { type: "tag", tag: "revisar.jogo" },
+  },
+  {
+    key: "content.adult.porn",
+    name: "Pornografia",
+    description: "Termo nuclear. Superficie leet pega p0rn e pr0n.",
+    category: "reputation",
+    priority: 32,
+    reasonCode: "ADULT_PORN",
+    condition: {
+      all: [
+        {
+          metric: METRICS.LEXICAL_SLD_LEET,
+          op: "matches_safe_regex",
+          value: "porno|pornogra|porn|hentai",
+        },
+        {
+          not: {
+            metric: METRICS.LEXICAL_SLD_ASCII,
+            op: "matches_safe_regex",
+            value: "livredaporno|combateaporno|contraaporno|semporno|vitimasdeporno|denunciaporno",
+          },
+        },
+      ],
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.adult.tubes",
+    name: "Portais e marcas de tube adulto",
+    description: "Marcas de tube e camming: bloqueio direto.",
+    category: "reputation",
+    priority: 33,
+    reasonCode: "ADULT_TUBE_BRAND",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_ASCII,
+      op: "matches_safe_regex",
+      value:
+        "xvideos|xnxx|xhamster|redtube|youporn|pornhub|brazzers|bangbros|naughtyamerica|chaturbate|stripchat|bongacams|cam4|camsoda|myfreecams|livejasmin",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.adult.escort",
+    name: "Acompanhantes e prostituicao",
+    description: "Termo dominante da categoria nas listas de liberacao brasileiras.",
+    category: "reputation",
+    priority: 34,
+    reasonCode: "ADULT_ESCORT",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value:
+        "acompanhante|garotadeprograma|garotasdeprograma|garotodeprograma|prostitut|fatalmodel|skokka|classificadosx|guiadoffy",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.adult.massage",
+    name: "Massagem como eufemismo",
+    description: "Tantrica, sensual, erotica e nuru sao o eufemismo padrao do nicho.",
+    category: "reputation",
+    priority: 35,
+    reasonCode: "ADULT_MASSAGE",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value:
+        "massagemtantrica|massagemsensual|massagemerotica|massagistasensual|massagemnuru|massagemrelaxanteadulto",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.adult.cam_onlyfans",
+    name: "OnlyFans e camming",
+    description: "Superficie leet resolve 0nlyfans e 0nlyf4ns sem regra extra.",
+    category: "reputation",
+    priority: 36,
+    reasonCode: "ADULT_CAM",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value: "onlyfans|camgirl|sexcam|webcamsex|camsexo|camwhore|meuprivacy|privacyvip",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.adult.leaks",
+    name: "Packs, nudes e vazados",
+    description: "So com contexto explicito: nude e vazado sozinhos sao falso-positivo.",
+    category: "reputation",
+    priority: 37,
+    reasonCode: "ADULT_LEAKS",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value:
+        "packdenudes|vendonudes|vendernudes|comprarnudes|nudesvazad|nudesdefamosas|caiunanet|fotosvazadas|famosasvazad|videosvazados",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.adult.fetish",
+    name: "Fetiche e BDSM",
+    description: "Inclui ninfeta e lolita, que carregam conotacao de menoridade.",
+    category: "reputation",
+    priority: 38,
+    reasonCode: "ADULT_FETISH",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value:
+        "fetiche|fetish|bdsm|sadomaso|sadoemaso|dominatrix|hotwife|cuckold|ninfeta|incesto|lolita|findom",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.adult.explicit_combo",
+    name: "Combinacoes explicitas",
+    description: "adulto e sexo so bloqueiam combinados com video, filme, conteudo ou site.",
+    category: "reputation",
+    priority: 39,
+    reasonCode: "ADULT_EXPLICIT_COMBO",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value:
+        "sexoexplicito|filmeadulto|filmesadulto|videoadulto|videosadulto|videosporno|filmesporno|conteudoadulto|jogosporno|agregadorporno|contoseroticos|siteadulto",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.adult.lgbt_porn",
+    name: "Pornografia LGBT (combinacao explicita)",
+    description:
+      "Nunca casa gay, trans ou travesti isolados: so combinados com termo pornografico.",
+    category: "reputation",
+    priority: 44,
+    reasonCode: "ADULT_LGBT_PORN",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value:
+        "pornogay|pornotrans|pornotravesti|sexogay|sexotrans|xvideosgay|xvideostravesti|xvideoscoroa|travestiacompanhante",
+    },
+    action: { type: "reject" },
+  },
+  {
+    key: "content.adult.prive_context",
+    name: "Prive com cidade ou qualificador",
+    description: "prive sozinho e falso-positivo (private, prive de eventos); exige sufixo.",
+    category: "reputation",
+    priority: 45,
+    reasonCode: "ADULT_PRIVE_CONTEXT",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value:
+        "privebh|privesp|priverj|privepoa|privedf|priveluxo|priveclub|privebar|privehaus|privevip",
+    },
+    action: { type: "candidate_deny" },
+  },
+  {
+    key: "content.adult.swing_shop",
+    name: "Swing e sex shop",
+    description: "swing sozinho e falso-positivo (danca, swing trade); exige contexto.",
+    category: "reputation",
+    priority: 46,
+    reasonCode: "ADULT_SWING_SHOP",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_LEET,
+      op: "matches_safe_regex",
+      value: "casadeswing|casaldeswing|clubedeswing|sexshop|sexyshop",
+    },
+    action: { type: "candidate_deny" },
+  },
+  {
+    key: "content.adult.age_gate",
+    name: "Marcacao de maioridade",
+    description: "Digitos preservados: usa a superficie sem leet.",
+    category: "reputation",
+    priority: 47,
+    reasonCode: "ADULT_AGE_GATE",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_ASCII,
+      op: "matches_safe_regex",
+      value: "conteudo18|conteudos18|mais18|maioresde18|apenasmaiores|showaovivo18",
+    },
+    action: { type: "candidate_deny" },
+  },
+  {
+    key: "content.adult.xxx",
+    name: "Marcador xxx",
+    description: "Whitelist remove algarismo romano e tamanho de roupa.",
+    category: "reputation",
+    priority: 48,
+    reasonCode: "ADULT_XXX",
+    condition: {
+      all: [
+        {
+          metric: METRICS.LEXICAL_SLD_ASCII,
+          op: "matches_safe_regex",
+          value: "xxx",
+        },
+        {
+          not: {
+            metric: METRICS.LEXICAL_SLD_ASCII,
+            op: "matches_safe_regex",
+            value: "xxxi|maxxx|xxxl|xxxs",
+          },
+        },
+      ],
+    },
+    action: { type: "candidate_deny" },
+  },
+  {
+    key: "content.adult.escort_ambiguous",
+    name: "Miche e termos curtos do nicho",
+    description: "Whitelist remove Michelin e Michele.",
+    category: "reputation",
+    priority: 49,
+    reasonCode: "ADULT_ESCORT_AMBIGUOUS",
+    condition: {
+      all: [
+        {
+          metric: METRICS.LEXICAL_SLD_LEET,
+          op: "matches_safe_regex",
+          value: "miche|gpsp|gpacompanhante",
+        },
+        {
+          not: {
+            metric: METRICS.LEXICAL_SLD_ASCII,
+            op: "matches_safe_regex",
+            value: "michel|micheli|michele|michelin|micheline",
+          },
+        },
+      ],
+    },
+    action: { type: "candidate_deny" },
+  },
+  {
+    key: "content.adult.review",
+    name: "Termo adulto ambiguo (revisao manual)",
+    description: "Palavra isolada e polissemica: sinaliza para revisao, nao bloqueia.",
+    category: "reputation",
+    priority: 61,
+    reasonCode: "ADULT_REVIEW",
+    condition: {
+      metric: METRICS.LEXICAL_SLD_WORDS,
+      op: "matches_safe_regex",
+      value:
+        "\\bnudes?\\b|\\bpacks?\\b|\\bvazad[oa]s?\\b|\\bnovinhas?\\b|\\bprive\\b|\\bsexo\\b|\\badulto\\b|\\bteen\\b|\\bnude\\b",
+    },
+    action: { type: "tag", tag: "revisar.adulto" },
+  },
+];
+
+/**
+ * Ruleset v2 = the conservative v1 rules plus the content-category blocks. Seeded as a DRAFT:
+ * activating it changes dispositions for every future run, so it is the operator's call.
+ */
+export const SEED_RULESET_V2 = {
+  name: "Conservative defaults v2 (bloqueio de jogo e conteudo adulto)",
+  version: 2,
+  description:
+    "v1 mais bloqueio automatico de dominios de jogo de azar/apostas/cassino e de conteudo adulto, com whitelist de falso-positivo por regra.",
+  rules: [...SEED_RULESET_V1.rules, ...CONTENT_BLOCK_RULES],
+};
+
 export const SEED_SETTINGS = {
   /**
    * Free qualification policy for the paid traffic provider. Deliberately strict and with the

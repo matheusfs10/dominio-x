@@ -362,7 +362,11 @@ describe("api (integration)", () => {
       url: "/v1/rulesets",
       headers: { cookie: viewerCookie },
     });
-    expect(rulesets.json().items[0].status).toBe("active");
+    // v1 is the active ruleset; v2 (content blocks) is seeded as a draft until an admin activates it.
+    const rulesetItems = rulesets.json().items as { id: string; version: number; status: string }[];
+    expect(rulesetItems.filter((r) => r.status === "active").map((r) => r.version)).toEqual([1]);
+    expect(rulesetItems.find((r) => r.version === 2)?.status).toBe("draft");
+    const activeRuleset = rulesetItems.find((r) => r.status === "active")!;
     const invalidRule = await app.inject({
       method: "POST",
       url: "/v1/rulesets",
@@ -384,14 +388,14 @@ describe("api (integration)", () => {
     expect(invalidRule.json().error.code).toBe("RULESET_INVALID");
     const clone = await app.inject({
       method: "POST",
-      url: `/v1/rulesets/${rulesets.json().items[0].id}/clone`,
+      url: `/v1/rulesets/${activeRuleset.id}/clone`,
       headers: { cookie: adminCookie, origin: ORIGIN },
     });
     expect(clone.statusCode).toBe(201);
     expect(clone.json().ruleset.status).toBe("draft");
     const editActive = await app.inject({
       method: "PATCH",
-      url: `/v1/rulesets/${rulesets.json().items[0].id}`,
+      url: `/v1/rulesets/${activeRuleset.id}`,
       headers: { cookie: adminCookie, origin: ORIGIN },
       payload: { name: "nope" },
     });

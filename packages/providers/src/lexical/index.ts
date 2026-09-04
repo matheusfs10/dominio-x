@@ -9,6 +9,50 @@ import { DICTIONARY } from "./dictionary.js";
 
 const VOWELS = new Set(["a", "e", "i", "o", "u"]);
 
+/** Digits that content-blocking evasion uses in place of letters ("cass1no", "0nlyfans"). */
+const LEET_MAP: Record<string, string> = {
+  "0": "o",
+  "1": "i",
+  "3": "e",
+  "4": "a",
+  "5": "s",
+  "7": "t",
+};
+
+/**
+ * Matching surfaces for rule regexes. Lower-cased and accent-stripped so a rule never has to
+ * spell "cassino" and "cassÍno"; separators either removed (so "casa-de-aposta" matches
+ * "casadeaposta") or turned into spaces (so `\b` anchors work).
+ *
+ * Leet mapping is a separate surface on purpose: it rewrites digits, which would destroy the
+ * `\d+bet` signature that is the strongest squatting pattern in the Brazilian release lists.
+ */
+export function normalizeNameSurface(
+  label: string,
+  options: { leet?: boolean; separators: "remove" | "space" },
+): string {
+  const base = label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const separated =
+    options.separators === "space"
+      ? base
+          .replace(/[-_.]+/g, " ")
+          .trim()
+          .replace(/\s+/g, " ")
+      : base.replace(/[-_.]+/g, "");
+  return options.leet ? separated.replace(/[013457]/g, (d) => LEET_MAP[d] ?? d) : separated;
+}
+
+/** The registrable label in its unicode form: what a human reads, before punycode. */
+export function unicodeSld(domain: { unicodeFqdn: string; sld: string; tld: string }): string {
+  const suffix = `.${domain.tld}`;
+  if (!domain.unicodeFqdn.endsWith(suffix)) return domain.sld;
+  const withoutTld = domain.unicodeFqdn.slice(0, -suffix.length);
+  return withoutTld.split(".").pop() || domain.sld;
+}
+
 /** Consonant clusters that are unusual in Portuguese/English words (used by the randomness heuristic). */
 const RARE_BIGRAMS = new Set([
   "bk",
@@ -238,6 +282,7 @@ export class LexicalProvider implements EnrichmentProvider {
   enrich(request: EnrichmentRequest): Promise<ProviderResult> {
     const startedAt = Date.now();
     const m = computeLexicalMetrics(request.domain);
+    const label = unicodeSld(request.domain);
     const o = (key: string, value: number | string | boolean | string[]) =>
       measuredObservation(key, value, {
         licenseClass: "internal",
@@ -260,6 +305,12 @@ export class LexicalProvider implements EnrichmentProvider {
       o(METRICS.LEXICAL_TLD, m.tld),
       o(METRICS.LEXICAL_IS_BR, m.isBr),
       o(METRICS.LEXICAL_IS_COM_BR, m.isComBr),
+      o(METRICS.LEXICAL_SLD_ASCII, normalizeNameSurface(label, { separators: "remove" })),
+      o(
+        METRICS.LEXICAL_SLD_LEET,
+        normalizeNameSurface(label, { separators: "remove", leet: true }),
+      ),
+      o(METRICS.LEXICAL_SLD_WORDS, normalizeNameSurface(label, { separators: "space" })),
     ];
     return Promise.resolve({
       providerKey: this.key,

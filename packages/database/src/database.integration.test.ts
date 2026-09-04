@@ -39,7 +39,11 @@ describe("database (integration)", () => {
 
     expect((await tdb.db.select().from(sources)).length).toBe(3);
     expect((await tdb.db.select().from(providers)).length).toBe(6);
-    expect((await tdb.db.select().from(rulesets)).length).toBe(1);
+    const seededRulesets = await tdb.db.select().from(rulesets);
+    expect(seededRulesets.map((r) => `v${r.version}:${r.status}`).sort()).toEqual([
+      "v1:active",
+      "v2:draft",
+    ]);
     expect((await tdb.db.select().from(rules)).length).toBeGreaterThan(5);
     expect((await tdb.db.select().from(scoreModels))[0]?.status).toBe("active");
     const admin = await tdb.db.query.users.findFirst({

@@ -19,6 +19,17 @@ export const METRICS = {
   LEXICAL_IS_BR: "lexical.is_br",
   LEXICAL_IS_COM_BR: "lexical.is_com_br",
   LEXICAL_HAS_DICTIONARY_TOKEN: "lexical.has_dictionary_token",
+  /**
+   * Normalized matching surfaces for the SLD, built once so rules stay simple. All are
+   * lower-cased and accent-stripped from the *unicode* label:
+   * - `sld_ascii`: separators removed, digits kept  -> "188betcasino", "casadeaposta"
+   * - `sld_leet` : same, then 0134 57 mapped to oiea st -> "cass1no" becomes "cassino"
+   * - `sld_words`: separators turned into spaces     -> "aposta esportiva" (enables \b)
+   * Digits survive only in `sld_ascii`/`sld_words`; leet mapping would eat them.
+   */
+  LEXICAL_SLD_ASCII: "lexical.sld_ascii",
+  LEXICAL_SLD_LEET: "lexical.sld_leet",
+  LEXICAL_SLD_WORDS: "lexical.sld_words",
 
   // DNS provider
   DNS_RESOLVES: "dns.resolves",

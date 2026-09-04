@@ -6,6 +6,7 @@ import {
   DEV_SAMPLE_DOMAINS,
   SEED_PROVIDERS,
   SEED_RULESET_V1,
+  SEED_RULESET_V2,
   SEED_SCORE_MODEL_V1,
   SEED_SCORE_MODEL_V2,
   SEED_SETTINGS,
@@ -110,23 +111,42 @@ export async function seedDatabase(db: Db, options: SeedOptions = {}): Promise<S
     log("score model v2 created as draft (traffic signals; activate it when ready)");
   }
 
-  const existingRuleset = await db.query.rulesets.findFirst({
-    where: eq(rulesets.version, SEED_RULESET_V1.version),
-  });
-  if (!existingRuleset) {
+  /** Creates a ruleset with its rules, or leaves it alone when that version already exists. */
+  const seedRuleset = async (
+    definition: {
+      name: string;
+      version: number;
+      description: string;
+      rules: readonly {
+        key: string;
+        name: string;
+        description: string;
+        category: string;
+        priority: number;
+        reasonCode: string;
+        condition: unknown;
+        action: unknown;
+      }[];
+    },
+    status: "active" | "draft",
+  ): Promise<boolean> => {
+    const existing = await db.query.rulesets.findFirst({
+      where: eq(rulesets.version, definition.version),
+    });
+    if (existing) return false;
     await db.transaction(async (tx) => {
       const [rs] = await tx
         .insert(rulesets)
         .values({
-          name: SEED_RULESET_V1.name,
-          version: SEED_RULESET_V1.version,
-          description: SEED_RULESET_V1.description,
-          status: "active",
-          activatedAt: new Date(),
+          name: definition.name,
+          version: definition.version,
+          description: definition.description,
+          status,
+          activatedAt: status === "active" ? new Date() : null,
         })
         .returning();
       await tx.insert(rules).values(
-        SEED_RULESET_V1.rules.map((r) => ({
+        definition.rules.map((r) => ({
           rulesetId: rs!.id,
           key: r.key,
           name: r.name,
@@ -140,8 +160,18 @@ export async function seedDatabase(db: Db, options: SeedOptions = {}): Promise<S
         })),
       );
     });
+    return true;
+  };
+
+  if (await seedRuleset(SEED_RULESET_V1, "active")) {
     report.rulesetCreated = true;
     log("ruleset v1 created and activated");
+  }
+  if (await seedRuleset(SEED_RULESET_V2, "draft")) {
+    // Draft on purpose: activating it starts rejecting gambling/adult domains automatically.
+    log(
+      `ruleset v2 created as draft (${SEED_RULESET_V2.rules.length} rules, content blocks included; activate it when ready)`,
+    );
   }
 
   const userCount = (await db.select({ value: count() }).from(users))[0]?.value ?? 0;
@@ -229,14 +259,12 @@ export async function seedDatabase(db: Db, options: SeedOptions = {}): Promise<S
     ] as const) {
       const existing = await db.query.users.findFirst({ where: eq(users.email, email) });
       if (!existing) {
-        await db
-          .insert(users)
-          .values({
-            email,
-            name: role,
-            role,
-            passwordHash: await hashPassword("dev-password-123"),
-          });
+        await db.insert(users).values({
+          email,
+          name: role,
+          role,
+          passwordHash: await hashPassword("dev-password-123"),
+        });
         log(`dev user ${email} created (password: dev-password-123)`);
       }
     }
