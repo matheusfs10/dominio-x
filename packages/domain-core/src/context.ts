@@ -1,4 +1,10 @@
-import type { DataForSeoConfig, PipelineConfig, SemrushConfig } from "@dominio-x/config";
+import type {
+  AhrefsConfig,
+  CapSolverConfig,
+  DataForSeoConfig,
+  PipelineConfig,
+  SemrushConfig,
+} from "@dominio-x/config";
 import type { Db } from "@dominio-x/database";
 import type { Logger } from "@dominio-x/observability";
 import type { ProviderRegistry } from "@dominio-x/providers";
@@ -17,6 +23,8 @@ export interface CoreContext {
   pipeline: PipelineConfig;
   semrush: SemrushConfig;
   dataforseo: DataForSeoConfig;
+  capsolver: CapSolverConfig;
+  ahrefs: AhrefsConfig;
   logger: Logger;
   now?: () => Date;
 }

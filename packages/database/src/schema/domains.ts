@@ -79,6 +79,11 @@ export const domainSummaries = pgTable(
     trafficVisitsLastMonth: real("traffic_visits_last_month"),
     trafficTrendRatio: real("traffic_trend_ratio"),
     hasTrafficData: boolean("has_traffic_data"),
+    /** Vendor Domain Rating (0..100, logarithmic). Mirrored from the authority provider. */
+    domainRating: real("domain_rating"),
+    referringDomains: integer("referring_domains"),
+    backlinks: integer("backlinks"),
+    hasAuthorityData: boolean("has_authority_data"),
     candidateGatePassed: boolean("candidate_gate_passed"),
     shortlistCount: integer("shortlist_count").notNull().default(0),
     sourceKeys: text("source_keys")
@@ -99,6 +104,7 @@ export const domainSummaries = pgTable(
     index("domain_summaries_manual_idx").on(t.manualDisposition),
     index("domain_summaries_updated_idx").on(t.updatedAt),
     index("domain_summaries_traffic_idx").on(t.trafficVisitsTotal),
+    index("domain_summaries_domain_rating_idx").on(t.domainRating),
   ],
 );
 

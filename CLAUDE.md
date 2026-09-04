@@ -21,6 +21,11 @@ status: `CHECKLIST.md`. Architecture: `docs/architecture.md`.
    Railway settings live in `scripts/railway-provision.mjs` + `.railway/railway.ts` (`railway.json` is deprecated).
 9. **Semrush integration mode is on STANDBY** (`packages/providers/src/semrush/mode.ts`). Do not implement
    scraping. When the operator decides, implement `fetchMetrics()` + `mapping.ts` only.
+10. **Captcha solving is a vendor adapter too.** `packages/providers/src/capsolver/` is the only place
+    that knows CapSolver; providers behind a challenge ask for a token through the neutral
+    `CaptchaSolver` interface (`packages/providers/src/captcha.ts`). The Ahrefs adapter parses the
+    tool's JSON endpoint only — never its HTML — and one lookup costs one solve, recorded on the
+    ledger even when the lookup that followed the paid solve failed.
 
 ## Commands
 

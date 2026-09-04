@@ -24,6 +24,7 @@ export const QUEUE_NAMES: Record<PipelineStage, string> = {
   seo: "domain-seo",
   traffic: "domain-traffic",
   rules: "domain-rules",
+  authority: "domain-authority",
   score: "domain-score",
   complete: "domain-complete",
 };

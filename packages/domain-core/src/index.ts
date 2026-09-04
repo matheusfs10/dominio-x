@@ -7,6 +7,8 @@ export * from "./crawler-jobs.js";
 export * from "./sources.js";
 export * from "./settings.js";
 export * from "./traffic-gate.js";
+export * from "./gate.js";
+export * from "./authority-gate.js";
 export * from "./rulesets.js";
 export * from "./pipeline.js";
 export * from "./usage.js";

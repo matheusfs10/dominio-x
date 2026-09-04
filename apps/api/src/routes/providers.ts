@@ -65,4 +65,36 @@ export const providerRoutes: FastifyPluginAsync<{ deps: ApiDeps }> = async (app,
       }
     },
   );
+
+  /**
+   * Captcha-solving credit behind the authority provider. One lookup costs one solve, so this
+   * balance is what actually limits how many Domain Rating lookups are still possible. The
+   * upstream endpoint is free and the result is cached in the solver.
+   */
+  r.get(
+    "/providers/ahrefs/account",
+    { schema: { tags: ["providers"] }, preHandler: requireRole("admin") },
+    async () => {
+      const provider = deps.core.providers.ahrefs;
+      const solver = deps.core.providers.capsolver.describeStatus();
+      const status = provider.describeStatus();
+      const base = {
+        state: status.state,
+        solverState: solver.state,
+        costPerLookupUsd: provider.costPerLookupUsd,
+      };
+      if (!solver.configured) return { ...base, configured: false, balanceUsd: null };
+      try {
+        return { ...base, configured: true, balanceUsd: await provider.solverBalanceUsd() };
+      } catch (error) {
+        deps.core.logger.warn({ err: error }, "captcha solver balance lookup failed");
+        return {
+          ...base,
+          configured: true,
+          balanceUsd: null,
+          error: error instanceof Error ? error.message : "unknown error",
+        };
+      }
+    },
+  );
 };

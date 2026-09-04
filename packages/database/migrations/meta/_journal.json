@@ -15,6 +15,13 @@
       "when": 1788492151736,
       "tag": "0001_dataforseo_traffic",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788505903780,
+      "tag": "0002_ahrefs_authority",
+      "breakpoints": true
     }
   ]
 }

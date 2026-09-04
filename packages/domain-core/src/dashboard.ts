@@ -30,7 +30,10 @@ export async function dashboard(ctx: CoreContext) {
       {
         semrush: ctx.semrush,
         dataforseo: ctx.dataforseo,
+        ahrefs: ctx.ahrefs,
         trafficState: ctx.providers.dataforseo.describeStatus().state,
+        authorityState: ctx.providers.ahrefs.describeStatus().state,
+        solverState: ctx.providers.capsolver.describeStatus().state,
       },
       { days: 7 },
     ),
@@ -79,6 +82,8 @@ export async function dashboard(ctx: CoreContext) {
       paidSkipped: usage.paidSkipped,
       dataforseo: usage.dataforseo,
       trafficSkipped: usage.trafficSkipped,
+      ahrefs: usage.ahrefs,
+      authoritySkipped: usage.authoritySkipped,
     },
     recentErrors: errors,
   };

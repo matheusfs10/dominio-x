@@ -8,6 +8,7 @@ import {
   listBlacklist,
   recordAudit,
   removeBlacklistEntry,
+  updateAuthorityGateSettings,
   updateCandidateGateSettings,
   updateTrafficGateSettings,
 } from "@dominio-x/domain-core";
@@ -34,8 +35,13 @@ export const settingsRoutes: FastifyPluginAsync<{ deps: ApiDeps }> = async (app,
         dataforseoLocation: `${deps.config.DATAFORSEO_LOCATION_NAME} (${deps.config.DATAFORSEO_LOCATION_CODE})`,
         dataforseoWindowMonths: deps.config.DATAFORSEO_WINDOW_MONTHS,
         dataforseoDataTtlDays: deps.config.DATAFORSEO_DATA_TTL_DAYS,
-        dataforseoMonthlyCostBudgetUsd:
-          deps.config.DATAFORSEO_MONTHLY_COST_BUDGET_USD ?? null,
+        dataforseoMonthlyCostBudgetUsd: deps.config.DATAFORSEO_MONTHLY_COST_BUDGET_USD ?? null,
+        ahrefsEnabled: deps.config.AHREFS_ENABLED,
+        ahrefsMode: deps.config.AHREFS_MODE,
+        ahrefsDataTtlDays: deps.config.AHREFS_DATA_TTL_DAYS,
+        ahrefsMonthlyCostBudgetUsd: deps.config.AHREFS_MONTHLY_COST_BUDGET_USD ?? null,
+        ahrefsCostPerLookupUsd: deps.core.providers.ahrefs.costPerLookupUsd,
+        captchaSolverState: deps.core.providers.capsolver.describeStatus().state,
       },
     }),
   );
@@ -54,6 +60,9 @@ export const settingsRoutes: FastifyPluginAsync<{ deps: ApiDeps }> = async (app,
       const trafficGate = request.body.trafficGate
         ? await updateTrafficGateSettings(db, request.body.trafficGate, user.id)
         : undefined;
+      const authorityGate = request.body.authorityGate
+        ? await updateAuthorityGateSettings(db, request.body.authorityGate, user.id)
+        : undefined;
       await recordAudit(db, {
         action: "settings.updated",
         actor: actorOf(request),
@@ -61,7 +70,10 @@ export const settingsRoutes: FastifyPluginAsync<{ deps: ApiDeps }> = async (app,
         targetId: Object.keys(request.body).join(",") || "settings",
         details: request.body,
       });
-      return { ...(await getAllSettings(db)), updated: { candidateGate, trafficGate } };
+      return {
+        ...(await getAllSettings(db)),
+        updated: { candidateGate, trafficGate, authorityGate },
+      };
     },
   );
 

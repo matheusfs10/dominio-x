@@ -94,6 +94,21 @@ export const METRICS = {
   TRAFFIC_PAID_VISITS_TOTAL: "traffic.paid_visits_total",
   TRAFFIC_SERP_COUNT_LAST_MONTH: "traffic.serp_count_last_month",
   TRAFFIC_MONTHLY_SERIES: "traffic.monthly_series",
+
+  // Link authority of the whole domain, as published by a backlink index (paid providers,
+  // e.g. Ahrefs). `authority.domain_rating` is a *logarithmic 0..100 vendor score*, not a
+  // percentage and not comparable across vendors; the raw counts next to it are.
+  AUTHORITY_HAS_DATA: "authority.has_data",
+  AUTHORITY_DOMAIN_RATING: "authority.domain_rating",
+  AUTHORITY_BACKLINKS: "authority.backlinks",
+  AUTHORITY_REFERRING_DOMAINS: "authority.referring_domains",
+  AUTHORITY_DOFOLLOW_BACKLINKS: "authority.dofollow_backlinks",
+  AUTHORITY_DOFOLLOW_REFERRING_DOMAINS: "authority.dofollow_referring_domains",
+  AUTHORITY_DOFOLLOW_RATIO: "authority.dofollow_ratio",
+  /** URL matching mode the lookup used (`exact`, `prefix`, `domain`, `subdomains`). */
+  AUTHORITY_MODE: "authority.mode",
+  /** Exact URL that was submitted, so a value can always be reproduced. */
+  AUTHORITY_TARGET_URL: "authority.target_url",
 } as const;
 
 export type MetricKey = (typeof METRICS)[keyof typeof METRICS];
@@ -101,7 +116,7 @@ export type MetricKey = (typeof METRICS)[keyof typeof METRICS];
 export const METRIC_KEYS: readonly MetricKey[] = Object.values(METRICS);
 
 /** Metrics that come from paid / provider-restricted sources. */
-export const PAID_METRIC_PREFIXES = ["seo.", "links.", "traffic."] as const;
+export const PAID_METRIC_PREFIXES = ["seo.", "links.", "traffic.", "authority."] as const;
 
 export const SEO_METRIC_KEYS: readonly MetricKey[] = [
   METRICS.SEO_ORGANIC_KEYWORDS,
@@ -133,4 +148,21 @@ export const TRAFFIC_METRIC_KEYS: readonly MetricKey[] = [
   METRICS.TRAFFIC_PAID_VISITS_TOTAL,
   METRICS.TRAFFIC_SERP_COUNT_LAST_MONTH,
   METRICS.TRAFFIC_MONTHLY_SERIES,
+];
+
+/**
+ * Domain-level link authority metrics. `authority.domain_rating` is a vendor score on a
+ * logarithmic 0..100 scale: the distance between 20 and 30 is not the distance between 70
+ * and 80, and it must never be averaged with the platform's own 0..100 scores.
+ */
+export const AUTHORITY_METRIC_KEYS: readonly MetricKey[] = [
+  METRICS.AUTHORITY_HAS_DATA,
+  METRICS.AUTHORITY_DOMAIN_RATING,
+  METRICS.AUTHORITY_BACKLINKS,
+  METRICS.AUTHORITY_REFERRING_DOMAINS,
+  METRICS.AUTHORITY_DOFOLLOW_BACKLINKS,
+  METRICS.AUTHORITY_DOFOLLOW_REFERRING_DOMAINS,
+  METRICS.AUTHORITY_DOFOLLOW_RATIO,
+  METRICS.AUTHORITY_MODE,
+  METRICS.AUTHORITY_TARGET_URL,
 ];

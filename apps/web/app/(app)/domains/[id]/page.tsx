@@ -79,6 +79,9 @@ interface Detail {
       trafficGatePassed?: boolean;
       trafficGateBlockedBy?: string | null;
       trafficGateReasons?: string[];
+      authorityGatePassed?: boolean;
+      authorityGateBlockedBy?: string | null;
+      authorityGateReasons?: string[];
       rules?: { disposition: string; dispositionReasons: string[] };
     };
   }[];
@@ -163,7 +166,6 @@ function obsValue(o: Observation): string {
   return JSON.stringify(o.valueJson);
 }
 
-
 /**
  * Estimated search traffic for the audience location configured for the provider (Brazil by
  * default). These are estimates derived from ranking positions and search volume, not analytics
@@ -210,8 +212,8 @@ function TrafficCard({ items }: { items: Observation[] }) {
     <Card title={title}>
       <p className="mb-3 text-xs text-neutral-500">
         Estimativa de visitas vindas da busca orgânica do Google em {location}
-        {from && to ? ` entre ${from} e ${to}` : ""}. É uma estimativa (posição no SERP ×
-        volume de busca), não a medição real de visitantes do site.
+        {from && to ? ` entre ${from} e ${to}` : ""}. É uma estimativa (posição no SERP × volume de
+        busca), não a medição real de visitantes do site.
       </p>
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <div>
@@ -232,7 +234,11 @@ function TrafficCard({ items }: { items: Observation[] }) {
           <div className="text-xs text-neutral-500">Tendência (2ª metade / 1ª)</div>
           <div
             className={`text-lg font-semibold ${
-              trend === null ? "text-neutral-400" : trend >= 1 ? "text-emerald-700" : "text-rose-700"
+              trend === null
+                ? "text-neutral-400"
+                : trend >= 1
+                  ? "text-emerald-700"
+                  : "text-rose-700"
             }`}
           >
             {trend === null ? "n/d" : `${trend}×`}
@@ -248,7 +254,9 @@ function TrafficCard({ items }: { items: Observation[] }) {
               style={{ height: `${Math.max(2, (m.visits / peak) * 100)}%` }}
               title={`${m.month}: ${m.visits} visitas estimadas`}
             />
-            <span className="text-[10px] text-neutral-500">{m.month.slice(5)}/{m.month.slice(2, 4)}</span>
+            <span className="text-[10px] text-neutral-500">
+              {m.month.slice(5)}/{m.month.slice(2, 4)}
+            </span>
           </div>
         ))}
       </div>
@@ -257,6 +265,93 @@ function TrafficCard({ items }: { items: Observation[] }) {
         <span>Pico mensal: {fmtNumber(num("traffic.visits_peak_month"))}</span>
         <span>Visitas pagas (anúncios): {fmtNumber(num("traffic.paid_visits_total"))}</span>
         <span>SERPs no último mês: {fmtNumber(num("traffic.serp_count_last_month"))}</span>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Domain Rating and the backlink counts behind it, from the Ahrefs index.
+ *
+ * DR is a vendor score on a 0..100 *logarithmic* scale: going from 20 to 30 is a far smaller
+ * jump than going from 70 to 80, and the number is not comparable with any other vendor's
+ * authority score nor with the platform's own 0..100 dimensions. It is shown as evidence.
+ */
+function AuthorityCard({ items }: { items: Observation[] }) {
+  const byKey = new Map(items.map((o) => [o.metricKey, o]));
+  const num = (key: string): number | null => {
+    const o = byKey.get(key);
+    return o && o.state === "measured" ? o.valueNumeric : null;
+  };
+  const text = (key: string): string | null => {
+    const o = byKey.get(key);
+    return o && o.state === "measured" ? o.valueText : null;
+  };
+  const gate = byKey.get("internal.authority_gate_passed");
+  const gateMeta = (gate?.metadataJson ?? {}) as { reasons?: string[] };
+  const dr = num("authority.domain_rating");
+  const refDomains = num("authority.referring_domains");
+  const backlinks = num("authority.backlinks");
+  const dofollowRatio = num("authority.dofollow_ratio");
+  const mode = text("authority.mode");
+  const target = text("authority.target_url");
+
+  if (dr === null) {
+    const blocked = gate?.valueBoolean === false;
+    return (
+      <Card title="Autoridade de links · Ahrefs">
+        <Empty
+          label={
+            blocked
+              ? `Consulta não realizada — ${(gateMeta.reasons ?? ["barrada pelo gate de autoridade"]).join("; ")}`
+              : "Sem dados de autoridade. A consulta ainda não rodou para este domínio."
+          }
+        />
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="Autoridade de links · Ahrefs">
+      <p className="mb-3 text-xs text-neutral-500">
+        Domain Rating é a nota do próprio Ahrefs (0 a 100) para o perfil de domínios que apontam
+        para este site. A escala é <strong>logarítmica</strong>: sair de 20 para 30 é muito mais
+        fácil que sair de 70 para 80. Não é comparável com a nota de outro fornecedor nem com as
+        notas do Dominio-X.
+      </p>
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div>
+          <div className="text-xs text-neutral-500">Domain Rating</div>
+          <div className="text-2xl font-semibold">{dr}</div>
+          <div className="mt-1 h-1.5 w-full rounded bg-neutral-200">
+            <div
+              className="h-1.5 rounded bg-amber-500"
+              style={{ width: `${Math.min(100, Math.max(0, dr))}%` }}
+            />
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-neutral-500">Domínios de referência</div>
+          <div className="text-lg font-semibold">{fmtNumber(refDomains)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-neutral-500">Backlinks</div>
+          <div className="text-lg font-semibold">{fmtNumber(backlinks)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-neutral-500">Domínios dofollow</div>
+          <div className="text-lg font-semibold">
+            {dofollowRatio === null ? "n/d" : `${Math.round(dofollowRatio * 100)}%`}
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-xs text-neutral-600 md:grid-cols-3">
+        <span>Backlinks dofollow: {fmtNumber(num("authority.dofollow_backlinks"))}</span>
+        <span>Domínios dofollow: {fmtNumber(num("authority.dofollow_referring_domains"))}</span>
+        <span>
+          Consulta: {mode ?? "n/d"}
+          {target ? ` · ${target}` : ""}
+        </span>
       </div>
     </Card>
   );
@@ -419,6 +514,7 @@ export default function DomainDetailPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <TrafficCard items={observations.data?.items ?? []} />
+          <AuthorityCard items={observations.data?.items ?? []} />
           <Card
             title={`Notas por dimensão${s ? ` · modelo v${s.scoreModelVersion} · ${fmtDate(s.createdAt)}` : ""}`}
           >
@@ -708,6 +804,16 @@ export default function DomainDetailPage() {
                         ? ` (${label(r.summaryJson.trafficGateBlockedBy)})`
                         : ""}{" "}
                       · {r.summaryJson.trafficGateReasons.join("; ")}
+                    </div>
+                  )}
+                  {r.summaryJson.authorityGateReasons && (
+                    <div className="text-[11px] text-neutral-500">
+                      autoridade:{" "}
+                      {r.summaryJson.authorityGatePassed ? "consultado" : "não consultado"}
+                      {r.summaryJson.authorityGateBlockedBy
+                        ? ` (${label(r.summaryJson.authorityGateBlockedBy)})`
+                        : ""}{" "}
+                      · {r.summaryJson.authorityGateReasons.join("; ")}
                     </div>
                   )}
                   <Link

@@ -399,6 +399,8 @@ export interface BatchFunnel {
   paidAnalyzed: number;
   /** Domains of this batch for which a paid traffic lookup was actually made. */
   trafficLookedUp: number;
+  /** Domains of this batch for which a paid authority lookup was actually made. */
+  authorityLookedUp: number;
   highPotential: number;
   shortlisted: number;
 }
@@ -438,18 +440,21 @@ export async function getBatchDetail(db: Db, batchId: string) {
       ),
     );
 
-  const [traffic] = await db
-    .select({ n: sql<number>`count(distinct ${analysisRuns.domainId})::int` })
-    .from(analysisSteps)
-    .innerJoin(analysisRuns, eq(analysisRuns.id, analysisSteps.analysisRunId))
-    .where(
-      and(
-        eq(analysisRuns.sourceBatchId, batchId),
-        eq(analysisSteps.stepKey, "traffic"),
-        eq(analysisSteps.status, "completed"),
-        sql`${analysisSteps.metadataJson}->>'outcome' = 'measured'`,
-      ),
-    );
+  const measuredInBatch = (stepKey: "traffic" | "authority") =>
+    db
+      .select({ n: sql<number>`count(distinct ${analysisRuns.domainId})::int` })
+      .from(analysisSteps)
+      .innerJoin(analysisRuns, eq(analysisRuns.id, analysisSteps.analysisRunId))
+      .where(
+        and(
+          eq(analysisRuns.sourceBatchId, batchId),
+          eq(analysisSteps.stepKey, stepKey),
+          eq(analysisSteps.status, "completed"),
+          sql`${analysisSteps.metadataJson}->>'outcome' = 'measured'`,
+        ),
+      );
+  const [traffic] = await measuredInBatch("traffic");
+  const [authority] = await measuredInBatch("authority");
 
   const [summaryCounts] = await db
     .select({
@@ -478,6 +483,7 @@ export async function getBatchDetail(db: Db, batchId: string) {
     gatePassed: runCounts?.gatePassed ?? 0,
     paidAnalyzed: paid?.n ?? 0,
     trafficLookedUp: traffic?.n ?? 0,
+    authorityLookedUp: authority?.n ?? 0,
     highPotential: summaryCounts?.highPotential ?? 0,
     shortlisted: summaryCounts?.shortlisted ?? 0,
   };

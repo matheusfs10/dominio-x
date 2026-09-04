@@ -74,7 +74,7 @@ describe("database (integration)", () => {
     expect(second.adminSkippedReason).toMatch(/already exist/);
 
     expect((await tdb.db.select().from(sources)).length).toBe(3);
-    expect((await tdb.db.select().from(providers)).length).toBe(6);
+    expect((await tdb.db.select().from(providers)).length).toBe(7);
     // v1 is active; the content ruleset takes the next free version and stays a draft.
     const seededRulesets = await tdb.db.select().from(rulesets);
     expect(seededRulesets.map((r) => `v${r.version}:${r.status}`).sort()).toEqual([

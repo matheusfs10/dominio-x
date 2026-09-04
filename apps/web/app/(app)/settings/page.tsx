@@ -28,6 +28,7 @@ interface Settings {
     maxDeepAnalysesPerBatch: number | null;
   };
   trafficGate: TrafficGate;
+  authorityGate: AuthorityGate;
   pipeline: Record<string, unknown>;
 }
 interface TrafficGate {
@@ -50,6 +51,37 @@ interface TrafficGate {
   maxLookupsPerMonth: number | null;
   monthlyCostBudgetUsd: number | null;
   minAccountBalanceUsd: number;
+}
+interface AuthorityGate {
+  enabled: boolean;
+  allowedDispositions: string[];
+  requireCandidateGate: boolean;
+  minOverallScore: number | null;
+  maxDigits: number;
+  maxHyphens: number;
+  minSldLength: number;
+  maxSldLength: number;
+  maxRandomness: number;
+  allowPunycode: boolean;
+  requireDictionaryToken: boolean;
+  allowedTlds: string[];
+  requireDnsResolution: boolean;
+  requireHttpReachable: boolean;
+  allowedHttpStatuses: number[];
+  reuseWithinDays: number;
+  maxLookupsPerBatch: number | null;
+  maxLookupsPerDay: number | null;
+  maxLookupsPerMonth: number | null;
+  monthlyCostBudgetUsd: number | null;
+  minSolverBalanceUsd: number;
+}
+interface AhrefsAccount {
+  configured: boolean;
+  state: string;
+  solverState: string;
+  costPerLookupUsd: number;
+  balanceUsd: number | null;
+  error?: string;
 }
 interface DataForSeoAccount {
   configured: boolean;
@@ -74,6 +106,14 @@ interface User {
 }
 
 const ROLES = ["viewer", "analyst", "admin"] as const;
+/** Automatic dispositions the rule engine can produce, in the order the UI shows them. */
+const DISPOSITIONS = ["accepted", "needs_review", "quarantined", "rejected"] as const;
+const DISPOSITION_LABELS: Record<string, string> = {
+  accepted: "aceito",
+  needs_review: "revisar",
+  quarantined: "quarentena",
+  rejected: "rejeitado",
+};
 
 const splitList = (value: string): string[] =>
   value
@@ -100,10 +140,12 @@ export default function SettingsPage() {
   });
   const [gate, setGate] = useState<Settings["candidateGate"] | null>(null);
   const [traffic, setTraffic] = useState<TrafficGate | null>(null);
+  const [authority, setAuthority] = useState<AuthorityGate | null>(null);
   useEffect(() => {
     if (settings.data) {
       setGate(settings.data.candidateGate);
       setTraffic(settings.data.trafficGate);
+      setAuthority(settings.data.authorityGate);
     }
   }, [settings.data]);
   const saveGate = useMutation({
@@ -114,10 +156,19 @@ export default function SettingsPage() {
     mutationFn: () => api.patch("/settings", { trafficGate: traffic }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
   });
-  // The upstream balance endpoint is free, but it is still a network call: only on demand.
+  const saveAuthority = useMutation({
+    mutationFn: () => api.patch("/settings", { authorityGate: authority }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
+  });
+  // The upstream balance endpoints are free, but they are still network calls: only on demand.
   const account = useQuery({
     queryKey: ["dataforseo-account"],
     queryFn: () => api.get<DataForSeoAccount>("/providers/dataforseo/account"),
+    enabled: false,
+  });
+  const solverAccount = useQuery({
+    queryKey: ["ahrefs-account"],
+    queryFn: () => api.get<AhrefsAccount>("/providers/ahrefs/account"),
     enabled: false,
   });
   const addBl = useMutation({
@@ -157,7 +208,7 @@ export default function SettingsPage() {
     e.currentTarget.reset();
   }
 
-  if (settings.isLoading || !gate || !traffic) return <Loading />;
+  if (settings.isLoading || !gate || !traffic || !authority) return <Loading />;
   return (
     <div>
       <PageHeader title="Configurações" />
@@ -165,6 +216,7 @@ export default function SettingsPage() {
         error={
           saveGate.error ??
           saveTraffic.error ??
+          saveAuthority.error ??
           addBl.error ??
           removeBl.error ??
           createUser.error ??
@@ -369,9 +421,7 @@ export default function SettingsPage() {
                 value={traffic.allowedTlds.join(", ")}
                 disabled={!isAdmin}
                 placeholder="com.br, br"
-                onChange={(e) =>
-                  setTraffic({ ...traffic, allowedTlds: splitList(e.target.value) })
-                }
+                onChange={(e) => setTraffic({ ...traffic, allowedTlds: splitList(e.target.value) })}
               />
             </div>
             <label className="flex items-center gap-2">
@@ -403,9 +453,7 @@ export default function SettingsPage() {
                 type="checkbox"
                 checked={traffic.requireDnsResolution}
                 disabled={!isAdmin}
-                onChange={(e) =>
-                  setTraffic({ ...traffic, requireDnsResolution: e.target.checked })
-                }
+                onChange={(e) => setTraffic({ ...traffic, requireDnsResolution: e.target.checked })}
               />{" "}
               exigir resolução de DNS
             </label>
@@ -414,9 +462,7 @@ export default function SettingsPage() {
                 type="checkbox"
                 checked={traffic.requireHttpReachable}
                 disabled={!isAdmin}
-                onChange={(e) =>
-                  setTraffic({ ...traffic, requireHttpReachable: e.target.checked })
-                }
+                onChange={(e) => setTraffic({ ...traffic, requireHttpReachable: e.target.checked })}
               />{" "}
               exigir site respondendo
             </label>
@@ -441,9 +487,7 @@ export default function SettingsPage() {
                 type="checkbox"
                 checked={traffic.requireCandidateGate}
                 disabled={!isAdmin}
-                onChange={(e) =>
-                  setTraffic({ ...traffic, requireCandidateGate: e.target.checked })
-                }
+                onChange={(e) => setTraffic({ ...traffic, requireCandidateGate: e.target.checked })}
               />{" "}
               exigir aprovação no gate de candidatos
             </label>
@@ -522,6 +566,301 @@ export default function SettingsPage() {
                 disabled={!isAdmin}
                 onChange={(e) =>
                   setTraffic({ ...traffic, minAccountBalanceUsd: Number(e.target.value) })
+                }
+              />
+            </div>
+          </div>
+        </Card>
+        <Card
+          title="Gate de autoridade (Domain Rating do Ahrefs)"
+          actions={
+            isAdmin && (
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => void solverAccount.refetch()}>
+                  Consultar saldo
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => saveAuthority.mutate()}>
+                  Salvar
+                </Button>
+              </div>
+            )
+          }
+        >
+          <p className="mb-3 text-xs text-neutral-500">
+            A consulta de Domain Rating roda <strong>depois do motor de regras</strong>, então o
+            filtro mais forte e mais barato é a própria disposição automática: um domínio que as
+            regras rejeitaram nunca chega ao Ahrefs. Cada consulta custa exatamente um captcha
+            resolvido, e esse custo é cobrado mesmo quando o índice não conhece o domínio. Analista
+            pode forçar uma consulta em &ldquo;análise profunda&rdquo;: isso pula as checagens de
+            qualificação, mas nunca os limites de volume e de custo.
+          </p>
+          {solverAccount.data && (
+            <p className="mb-3 rounded bg-neutral-50 p-2 text-xs">
+              Resolvedor de captcha ({label(solverAccount.data.solverState)}):{" "}
+              {solverAccount.data.balanceUsd === null
+                ? `sem saldo disponível${solverAccount.data.error ? ` — ${solverAccount.data.error}` : ""}`
+                : `US$ ${solverAccount.data.balanceUsd.toFixed(2)} de crédito, ` +
+                  `US$ ${solverAccount.data.costPerLookupUsd} por consulta ` +
+                  `(~${Math.floor(solverAccount.data.balanceUsd / Math.max(solverAccount.data.costPerLookupUsd, 1e-9)).toLocaleString("pt-BR")} consultas)`}
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="col-span-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={authority.enabled}
+                  disabled={!isAdmin}
+                  onChange={(e) => setAuthority({ ...authority, enabled: e.target.checked })}
+                />
+                consultar automaticamente no pipeline
+              </label>
+            </div>
+            <div className="col-span-2">
+              <Label>Disposições aceitas (vazio = qualquer uma)</Label>
+              <div className="flex flex-wrap gap-3 text-xs">
+                {DISPOSITIONS.map((d) => (
+                  <label key={d} className="flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={authority.allowedDispositions.includes(d)}
+                      disabled={!isAdmin}
+                      onChange={(e) =>
+                        setAuthority({
+                          ...authority,
+                          allowedDispositions: e.target.checked
+                            ? [...authority.allowedDispositions, d]
+                            : authority.allowedDispositions.filter((x) => x !== d),
+                        })
+                      }
+                    />
+                    {DISPOSITION_LABELS[d]}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="col-span-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={authority.requireCandidateGate}
+                  disabled={!isAdmin}
+                  onChange={(e) =>
+                    setAuthority({ ...authority, requireCandidateGate: e.target.checked })
+                  }
+                />
+                exigir aprovação no gate de candidatos
+              </label>
+            </div>
+            <div className="col-span-2">
+              <Label>Nota geral mínima da última análise concluída (vazio = não checar)</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={authority.minOverallScore ?? ""}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setAuthority({ ...authority, minOverallScore: numOrNull(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label>Máx. de dígitos</Label>
+              <Input
+                type="number"
+                min={0}
+                value={authority.maxDigits}
+                disabled={!isAdmin}
+                onChange={(e) => setAuthority({ ...authority, maxDigits: Number(e.target.value) })}
+              />
+            </div>
+            <div>
+              <Label>Máx. de hífens</Label>
+              <Input
+                type="number"
+                min={0}
+                value={authority.maxHyphens}
+                disabled={!isAdmin}
+                onChange={(e) => setAuthority({ ...authority, maxHyphens: Number(e.target.value) })}
+              />
+            </div>
+            <div>
+              <Label>Tamanho mínimo do SLD</Label>
+              <Input
+                type="number"
+                min={1}
+                value={authority.minSldLength}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setAuthority({ ...authority, minSldLength: Number(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label>Tamanho máximo do SLD</Label>
+              <Input
+                type="number"
+                min={1}
+                value={authority.maxSldLength}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setAuthority({ ...authority, maxSldLength: Number(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label>Aleatoriedade máxima (0 a 1)</Label>
+              <Input
+                type="number"
+                step="0.05"
+                min={0}
+                max={1}
+                value={authority.maxRandomness}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setAuthority({ ...authority, maxRandomness: Number(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label>TLDs permitidos (vazio = qualquer)</Label>
+              <Input
+                value={authority.allowedTlds.join(", ")}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setAuthority({ ...authority, allowedTlds: splitList(e.target.value) })
+                }
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={authority.allowPunycode}
+                  disabled={!isAdmin}
+                  onChange={(e) => setAuthority({ ...authority, allowPunycode: e.target.checked })}
+                />
+                permitir nomes IDN (punycode)
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={authority.requireDictionaryToken}
+                  disabled={!isAdmin}
+                  onChange={(e) =>
+                    setAuthority({ ...authority, requireDictionaryToken: e.target.checked })
+                  }
+                />
+                exigir palavra de dicionário no nome
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={authority.requireDnsResolution}
+                  disabled={!isAdmin}
+                  onChange={(e) =>
+                    setAuthority({ ...authority, requireDnsResolution: e.target.checked })
+                  }
+                />
+                exigir que o domínio resolva em DNS
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={authority.requireHttpReachable}
+                  disabled={!isAdmin}
+                  onChange={(e) =>
+                    setAuthority({ ...authority, requireHttpReachable: e.target.checked })
+                  }
+                />
+                exigir que o site responda por HTTP
+              </label>
+            </div>
+            <div className="col-span-2">
+              <Label>Status HTTP aceitos (vazio = qualquer)</Label>
+              <Input
+                value={authority.allowedHttpStatuses.join(", ")}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setAuthority({
+                    ...authority,
+                    allowedHttpStatuses: splitList(e.target.value).map(Number),
+                  })
+                }
+              />
+            </div>
+            <div>
+              <Label>Não repetir por (dias)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={authority.reuseWithinDays}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setAuthority({ ...authority, reuseWithinDays: Number(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label>Máx. por lote (vazio = sem limite)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={authority.maxLookupsPerBatch ?? ""}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setAuthority({ ...authority, maxLookupsPerBatch: numOrNull(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label>Máx. por dia (vazio = sem limite)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={authority.maxLookupsPerDay ?? ""}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setAuthority({ ...authority, maxLookupsPerDay: numOrNull(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label>Máx. por mês (vazio = sem limite)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={authority.maxLookupsPerMonth ?? ""}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setAuthority({ ...authority, maxLookupsPerMonth: numOrNull(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label>Orçamento mensal em US$ (vazio = só o do ambiente)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min={0}
+                value={authority.monthlyCostBudgetUsd ?? ""}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setAuthority({ ...authority, monthlyCostBudgetUsd: numOrNull(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <Label>Saldo mínimo do resolvedor em US$ (0 = não checar)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min={0}
+                value={authority.minSolverBalanceUsd}
+                disabled={!isAdmin}
+                onChange={(e) =>
+                  setAuthority({ ...authority, minSolverBalanceUsd: Number(e.target.value) })
                 }
               />
             </div>

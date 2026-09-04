@@ -41,6 +41,9 @@ interface DomainRow {
     hasSeoData: boolean | null;
     trafficVisitsTotal: number | null;
     hasTrafficData: boolean | null;
+    domainRating: number | null;
+    referringDomains: number | null;
+    hasAuthorityData: boolean | null;
     shortlistCount: number;
     tagKeys: string[];
     sourceKeys: string[];
@@ -63,6 +66,9 @@ const DEFAULT_FILTERS = {
   hasSeo: "",
   hasTraffic: "",
   minVisits: "",
+  hasAuthority: "",
+  minDomainRating: "",
+  minReferringDomains: "",
   shortlisted: "",
   maxDigits: "",
   maxHyphens: "",
@@ -83,6 +89,7 @@ const SORT_LABELS: Record<string, string> = {
   seo_score: "nota de SEO",
   risk_score: "risco",
   traffic_visits: "visitantes estimados",
+  domain_rating: "domain rating",
 };
 
 export default function DomainsPage() {
@@ -318,6 +325,36 @@ export default function DomainsPage() {
             />
           </div>
           <div>
+            <Label>Dados de autoridade</Label>
+            <Select
+              value={draft.hasAuthority}
+              onChange={(e) => set("hasAuthority", e.target.value)}
+            >
+              <option value="">qualquer</option>
+              <option value="true">presentes</option>
+              <option value="false">ausentes</option>
+            </Select>
+          </div>
+          <div>
+            <Label>Domain Rating mínimo</Label>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              value={draft.minDomainRating}
+              onChange={(e) => set("minDomainRating", e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>Mín. de domínios de referência</Label>
+            <Input
+              type="number"
+              min={0}
+              value={draft.minReferringDomains}
+              onChange={(e) => set("minReferringDomains", e.target.value)}
+            />
+          </div>
+          <div>
             <Label>Status HTTP</Label>
             <Input
               type="number"
@@ -390,6 +427,7 @@ export default function DomainsPage() {
                   <th>Nome</th>
                   <th>SEO</th>
                   <th>Visitantes</th>
+                  <th title="Domain Rating do Ahrefs (0-100, escala logarítmica)">DR</th>
                   <th>Risco</th>
                   <th>DNS</th>
                   <th>HTTP</th>
@@ -433,6 +471,16 @@ export default function DomainsPage() {
                     <td>{fmtScore(d.summary?.seoScore)}</td>
                     <td title="visitantes estimados no período configurado">
                       {fmtNumber(d.summary?.trafficVisitsTotal)}
+                    </td>
+                    <td
+                      title={
+                        d.summary?.referringDomains === null ||
+                        d.summary?.referringDomains === undefined
+                          ? "Domain Rating do Ahrefs (escala logarítmica)"
+                          : `${d.summary.referringDomains} domínios de referência`
+                      }
+                    >
+                      {d.summary?.domainRating ?? "—"}
                     </td>
                     <td>
                       <ScoreBar value={d.summary?.riskScore} invert />

@@ -42,7 +42,7 @@ Packages are consumed as TypeScript source ("just-in-time" packages); apps bundl
 ```
 preflight (lexical + blacklist) → dns → crawl (isolated crawler, lease-based) → candidate_gate
 → seo (paid, gated + budgeted) → traffic (paid, free qualification gate + USD budget)
-→ rules → score → complete
+→ rules → authority (paid, gated on the rule outcome + USD budget) → score → complete
 ```
 
 Each stage is a BullMQ job with a deterministic id `<stage>:<runId>`; handlers are idempotent
@@ -52,8 +52,14 @@ the crawler claims the row through the machine API, and completion (or timeout) 
 
 Observations carry TTLs; a stage reuses fresh observations of its provider unless the run was
 forced (`forceRefresh`). Lexical observations never expire; DNS 24h; HTTP 72h; Semrush per
-`SEMRUSH_DATA_TTL_DAYS`; DataForSEO per `DATAFORSEO_DATA_TTL_DAYS`, plus a gate-level cooldown
-(`reuseWithinDays`) that stops us paying twice for a domain measured recently.
+`SEMRUSH_DATA_TTL_DAYS`; DataForSEO per `DATAFORSEO_DATA_TTL_DAYS`; Ahrefs per
+`AHREFS_DATA_TTL_DAYS` — the last two plus a gate-level cooldown (`reuseWithinDays`) that stops us
+paying twice for a domain measured recently.
+
+`authority` runs after `rules` on purpose: the lookup costs one captcha solve per domain, and the
+automatic disposition the rule engine just produced is the cheapest, strongest filter available.
+The consequence is that its Domain Rating reaches the rule engine only on the _next_ run, and no
+score model reads it.
 
 `domain_summaries` is a denormalized "latest state" table maintained by the pipeline and analyst
 actions; it powers the explorer. It can always be rebuilt from the historical tables.

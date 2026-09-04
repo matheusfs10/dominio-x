@@ -279,7 +279,11 @@ try {
         ? JSON.parse(fs.readFileSync(secretsPath, "utf8"))
         : null;
     const apiVars = await existingVariables(state.core, state.core.services.api);
-    if (!secrets && usableSecret(apiVars.SESSION_SECRET) && usableSecret(apiVars.CRAWLER_MACHINE_TOKEN)) {
+    if (
+      !secrets &&
+      usableSecret(apiVars.SESSION_SECRET) &&
+      usableSecret(apiVars.CRAWLER_MACHINE_TOKEN)
+    ) {
       // Reuse the literal values. Never a `${{api.*}}` reference: on the api service itself that
       // is a self-reference and resolves to "", which fails config validation on the next boot.
       secrets = {
@@ -288,7 +292,10 @@ try {
       };
       console.log("reusing the secrets already set on the api service");
     }
-    if (!secrets && (apiVars.SESSION_SECRET !== undefined || apiVars.CRAWLER_MACHINE_TOKEN !== undefined)) {
+    if (
+      !secrets &&
+      (apiVars.SESSION_SECRET !== undefined || apiVars.CRAWLER_MACHINE_TOKEN !== undefined)
+    ) {
       console.error(
         "refusing to continue: the api service already has SESSION_SECRET/CRAWLER_MACHINE_TOKEN but they are\n" +
           "unusable (empty, too short, or a reference). Repair them in the dashboard first, or pass\n" +
@@ -332,6 +339,16 @@ try {
       DATAFORSEO_MAX_CONCURRENCY: "2",
       DATAFORSEO_DATA_TTL_DAYS: "30",
       DATAFORSEO_MONTHLY_COST_BUDGET_USD: "20",
+      // Paid authority provider: off until the operator sets the CapSolver key and reviews the
+      // free authority gate in Settings. The key is never provisioned from here.
+      AHREFS_ENABLED: "false",
+      AHREFS_MODE: "subdomains",
+      AHREFS_MAX_RPS: "0.2",
+      AHREFS_MAX_CONCURRENCY: "1",
+      AHREFS_DATA_TTL_DAYS: "30",
+      AHREFS_MONTHLY_COST_BUDGET_USD: "10",
+      CAPSOLVER_ENABLED: "false",
+      CAPSOLVER_COST_PER_SOLVE_USD: "0.001",
       PIPELINE_WORKER_CONCURRENCY: "5",
       DNS_TTL_HOURS: "24",
       HTTP_TTL_HOURS: "72",

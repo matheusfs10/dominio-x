@@ -6,14 +6,19 @@ observations (`metricKey`, `value`, `state`, `licenseClass`, `ttlHours`) plus a 
 Provider failures never crash an analysis: the step is marked failed/skipped and the run ends
 `partial`.
 
-| Key       | Cost | Capabilities                      | Default state                   | Notes                                                        |
-| --------- | ---- | --------------------------------- | ------------------------------- | ------------------------------------------------------------ |
-| `lexical` | free | lexical                           | ready                           | local computation; no expiry                                 |
-| `dns`     | free | dns                               | ready                           | A/AAAA/MX/NS/TXT/CNAME, resolves flag, SPF presence; TTL 24h |
-| `crawler` | free | http                              | ready when `CRAWLER_ENABLED`    | runs only in the isolated project; TTL 72h                   |
-| `rdap`    | free | rdap                              | disabled (`RDAP_ENABLED=false`) | IANA bootstrap redirector, 2 rps, no contact/PII stored      |
-| `semrush` | paid | seo, backlinks, traffic, keywords | **decision_pending (standby)**  | see below                                                    |
-| `dataforseo` | paid | traffic                        | disabled (`DATAFORSEO_ENABLED=false`) | estimated search traffic per location; see below       |
+| Key          | Cost | Capabilities                      | Default state                         | Notes                                                        |
+| ------------ | ---- | --------------------------------- | ------------------------------------- | ------------------------------------------------------------ |
+| `lexical`    | free | lexical                           | ready                                 | local computation; no expiry                                 |
+| `dns`        | free | dns                               | ready                                 | A/AAAA/MX/NS/TXT/CNAME, resolves flag, SPF presence; TTL 24h |
+| `crawler`    | free | http                              | ready when `CRAWLER_ENABLED`          | runs only in the isolated project; TTL 72h                   |
+| `rdap`       | free | rdap                              | disabled (`RDAP_ENABLED=false`)       | IANA bootstrap redirector, 2 rps, no contact/PII stored      |
+| `semrush`    | paid | seo, backlinks, traffic, keywords | **decision_pending (standby)**        | see below                                                    |
+| `dataforseo` | paid | traffic                           | disabled (`DATAFORSEO_ENABLED=false`) | estimated search traffic per location; see below             |
+| `ahrefs`     | paid | authority, backlinks              | disabled (`AHREFS_ENABLED=false`)     | Domain Rating from the public backlink checker; see below    |
+
+`capsolver` is not an enrichment provider: it is the captcha solver the Ahrefs adapter depends on
+(`packages/providers/src/capsolver/`). It produces no observation and appears in the ledger only
+through the lookups that needed it.
 
 ## Semrush — STANDBY
 
@@ -55,7 +60,7 @@ excluded so a partial month never reads as a traffic collapse in `traffic.trend_
 
 ### Cost control — the free funnel in front of the paid call
 
-The provider is billed per request, so the whole design is about *not* calling it. In order, all of
+The provider is billed per request, so the whole design is about _not_ calling it. In order, all of
 these are free and any one of them stops the spend (`packages/domain-core/src/traffic-gate.ts`):
 
 1. **Fresh observations** — inside `DATAFORSEO_DATA_TTL_DAYS`, the stage reuses what is on file.
@@ -73,8 +78,8 @@ these are free and any one of them stops the spend (`packages/domain-core/src/tr
 Every skip records the exact check that blocked it in `analysis_steps.metadata_json.blockedBy`, and
 the Usage page groups them so you can see where the funnel is losing candidates.
 
-Analyst overrides (**Forçar análise profunda**) skip the *qualification* checks (3 and 4) but never
-the *money* checks (1, 2, 5, 6) — that is the point of the gate.
+Analyst overrides (**Forçar análise profunda**) skip the _qualification_ checks (3 and 4) but never
+the _money_ checks (1, 2, 5, 6) — that is the point of the gate.
 
 Thresholds live in `app_settings.traffic_gate` and are edited in **Configurações › Gate de tráfego**.
 The seeded defaults are deliberately strict and `enabled: false`, so no automatic lookup happens
@@ -104,11 +109,94 @@ with `configJson.useTrafficSignals: true`; activating it makes the SEO dimension
 visits, month coverage and trend. Activation is an operator decision because it changes how every
 future run is scored.
 
+## Ahrefs — Domain Rating
+
+Answers one question: **how strong is this domain's backlink profile**, as scored by the Ahrefs
+index. Source: the public Backlink Checker at `https://ahrefs.com/backlink-checker/`, whose front
+end posts `{ url, mode, captcha }` to `POST /v4/stGetFreeBacklinksOverview` and gets back
+`domainRating`, `backlinks`, `refdomains`, `dofollowBacklinks` and `dofollowRefdomains`.
+
+`mode` is the URL matching mode — `exact`, `prefix`, `domain` or `subdomains`. `AHREFS_MODE`
+defaults to `subdomains`, which is what the tool itself uses and what covers `www` and other
+hosts of the same registrable domain.
+
+### What the number is, and is not
+
+Domain Rating is a **vendor score on a 0–100 logarithmic scale**. Moving from 20 to 30 is a far
+smaller change than moving from 70 to 80, it is not a percentage, and it is not comparable with
+any other vendor's authority metric nor with the platform's own 0–100 dimensions. It is recorded
+as evidence and shown as such; nothing averages it into a score.
+
+A domain the index does not know produces `authority.domain_rating` as `not_available`, never 0 —
+and a domain the index knows at DR 0 produces a measured 0 with `authority.has_data = true`.
+
+### Cost — the lookup is free, the captcha is not
+
+There is no API key. The tool sits behind a Cloudflare Turnstile widget, and the endpoint rejects a
+request whose `captcha` field is absent, stale or reused. Every lookup therefore needs one freshly
+solved token, bought from CapSolver (`AntiTurnstileTaskProxyLess`, site key
+`AHREFS_TURNSTILE_SITEKEY`). **The price of a lookup is the price of one solve**, and it is paid
+whether or not the index knows the domain.
+
+That is also why the adapter writes a single ledger row per attempt carrying the solve cost — even
+when the solve succeeded and the lookup that followed it failed. A run of upstream errors must not
+be able to drain the captcha balance without ever showing up against the monthly budget.
+
+If the upstream WAF starts challenging the egress IP the adapter fails with an explicit
+"blocked by the upstream WAF" message rather than retrying blindly; `AHREFS_COOKIE` is the escape
+hatch for a `cf_clearance` cookie obtained out of band.
+
+### Cost control — the free funnel in front of the paid lookup
+
+The stage runs **after the rule engine**, which is the whole point: by then the run already carries
+an automatic disposition, so the strongest and cheapest filter is "did the rules accept it?".
+In order, all of these are free and any one of them stops the spend
+(`packages/domain-core/src/authority-gate.ts`, built on the shared `gate.ts` primitives):
+
+1. **Fresh observations** — inside `AHREFS_DATA_TTL_DAYS`, the stage reuses what is on file.
+2. **Cooldown** — `reuseWithinDays` refuses to re-measure a domain we asked about recently, even
+   when the observation has already expired.
+3. **Rule outcome** — `allowedDispositions` (default `["accepted"]`), the candidate gate, and an
+   optional minimum overall score taken from the last completed analysis (the score stage of _this_
+   run has not happened yet).
+4. **Name shape** — max digits, max hyphens, SLD length range, randomness, punycode, optional
+   dictionary word, TLD allowlist. All from the free lexical provider.
+5. **Network evidence** — DNS resolution, HTTP reachability, allowed HTTP statuses.
+6. **Volume caps** — per batch, per UTC day, per UTC month, counted from our own request ledger.
+7. **Money caps** — projected spend against the monthly USD budget (the strictest of the DB setting
+   and `AHREFS_MONTHLY_COST_BUDGET_USD` wins), and an optional minimum solver balance checked
+   through CapSolver's free `getBalance` endpoint.
+
+Every skip records the exact check that blocked it in `analysis_steps.metadata_json.blockedBy`, and
+the Usage page groups them so you can see where the funnel is losing candidates.
+
+Analyst overrides (**Forçar análise profunda**) skip the _qualification_ checks (3, 4 and 5) but
+never the _money_ checks — that is the point of the gate.
+
+Thresholds live in `app_settings.authority_gate` and are edited in
+**Configurações › Gate de autoridade**. The seeded defaults are deliberately strict and
+`enabled: false`, so no automatic lookup happens until an operator reviews them.
+
+### Metric keys
+
+`authority.domain_rating`, `authority.backlinks`, `authority.referring_domains`,
+`authority.dofollow_backlinks`, `authority.dofollow_referring_domains`,
+`authority.dofollow_ratio`, plus the descriptors `authority.has_data` / `authority.mode` /
+`authority.target_url`.
+
+### Scoring
+
+No score model uses these metrics. Domain Rating is recorded, mirrored into
+`domain_summaries.domain_rating` for the explorer's filter and sort, and available to the rule
+engine on the **next** run (the `rules` stage of the current run has already finished when the
+lookup happens). Feeding it into a score dimension is a separate, explicit decision.
+
 ## Metric keys
 
 `packages/contracts/src/metrics.ts` — `lexical.*`, `dns.*`, `http.*`, `rdap.*`, `seo.*`, `links.*`,
-`traffic.*`, plus internal `internal.blacklisted`, `internal.candidate_gate_passed` and
-`internal.traffic_gate_passed`.
+`traffic.*`, `authority.*`, plus internal `internal.blacklisted`,
+`internal.candidate_gate_passed`, `internal.traffic_gate_passed` and
+`internal.authority_gate_passed`.
 
 ## Retention / licensing
 

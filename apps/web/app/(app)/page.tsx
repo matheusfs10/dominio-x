@@ -60,6 +60,15 @@ interface Dashboard {
       windowMonths: number;
     };
     trafficSkipped: { blockedBy: string; count: number }[];
+    ahrefs: {
+      state: string;
+      lookupsThisMonth: number;
+      costThisMonthUsd: number;
+      monthlyCostBudgetUsd: number | null;
+      mode: string;
+      solverState: string;
+    };
+    authoritySkipped: { blockedBy: string; count: number }[];
   };
   recentErrors: {
     id: string;
@@ -227,6 +236,16 @@ export default function OverviewPage() {
               : ""}{" "}
             · {fmtNumber(d.usage.trafficSkipped.reduce((n, r) => n + r.count, 0))} barradas pelo
             gate de tráfego
+          </p>
+          <p className="mt-1 text-xs text-neutral-500">
+            Ahrefs (Domain Rating, modo {d.usage.ahrefs.mode}):{" "}
+            {fmtNumber(d.usage.ahrefs.lookupsThisMonth)} consultas no mês · US${" "}
+            {fmtNumber(d.usage.ahrefs.costThisMonthUsd, 4)}
+            {d.usage.ahrefs.monthlyCostBudgetUsd !== null
+              ? ` de US$ ${fmtNumber(d.usage.ahrefs.monthlyCostBudgetUsd, 2)}`
+              : ""}{" "}
+            · {fmtNumber(d.usage.authoritySkipped.reduce((n, r) => n + r.count, 0))} barradas pelo
+            gate de autoridade
           </p>
         </Card>
         <Card title="Erros operacionais recentes">

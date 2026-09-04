@@ -6,6 +6,7 @@ import {
   domainObservations,
   domainScores,
   domainSummaries,
+  providerRequests,
   ruleExecutions,
   sourceBatches,
 } from "@dominio-x/database";
@@ -14,7 +15,14 @@ import {
   ManualSourceAdapter,
   RegistroBrReleaseSourceAdapter,
 } from "@dominio-x/source-adapters";
-import { DnsProvider } from "@dominio-x/providers";
+import { ahrefsSchema } from "@dominio-x/config";
+import {
+  AhrefsClient,
+  AhrefsProvider,
+  DnsProvider,
+  type CaptchaSolver,
+  type SolvedCaptcha,
+} from "@dominio-x/providers";
 import type { MemoryObjectStorage } from "@dominio-x/storage";
 import { getRunSteps, requestAnalysis, retryRun } from "./analysis.js";
 import { claimCrawlerJobs, completeCrawlerJob, heartbeatCrawlerJob } from "./crawler-jobs.js";
@@ -29,6 +37,7 @@ import {
   getShortlist,
 } from "./shortlists.js";
 import { runRetention } from "./retention.js";
+import { updateAuthorityGateSettings } from "./settings.js";
 
 /** DNS provider that never touches the network. */
 class FakeDns extends DnsProvider {
@@ -60,6 +69,56 @@ class FakeDns extends DnsProvider {
       durationMs: 1,
     });
   }
+}
+
+/** Captcha solver that costs money on paper and nothing in reality. */
+class FakeSolver implements CaptchaSolver {
+  readonly key = "fake-solver";
+  readonly costPerSolveUsd = 0.002;
+  solves = 0;
+  isConfigured(): boolean {
+    return true;
+  }
+  describeStatus(): { configured: boolean; state: string } {
+    return { configured: true, state: "ready" };
+  }
+  solve(): Promise<SolvedCaptcha> {
+    this.solves += 1;
+    return Promise.resolve({
+      token: "0.token",
+      durationMs: 1,
+      costUsd: this.costPerSolveUsd,
+      requests: [],
+    });
+  }
+  balanceUsd(): Promise<number> {
+    return Promise.resolve(50);
+  }
+}
+
+/** A real Ahrefs adapter wired to a stubbed solver and a stubbed HTTP call. */
+function fakeAhrefs(overview: Record<string, number>) {
+  const solver = new FakeSolver();
+  let calls = 0;
+  const provider = new AhrefsProvider({
+    config: ahrefsSchema.parse({ AHREFS_ENABLED: "true" }),
+    solver,
+    client: new AhrefsClient({
+      baseUrl: "https://ahrefs.test",
+      timeoutMs: 1_000,
+      userAgent: "test",
+      fetchImpl: () => {
+        calls += 1;
+        return Promise.resolve(
+          new Response(JSON.stringify(["Ok", { data: overview, signedInput: {} }]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      },
+    }),
+  });
+  return { provider, solver, calls: () => calls };
 }
 
 const FIXTURE_A = `# Processo de liberação no período de 2026-08-12T15:00:00-03:00 a 2026-08-19T15:00:00-03:00
@@ -114,6 +173,7 @@ describe("domain-core pipeline (integration)", () => {
       "seo",
       "traffic",
       "rules",
+      "authority",
       "score",
       "complete",
     ]);
@@ -131,6 +191,11 @@ describe("domain-core pipeline (integration)", () => {
     // The paid traffic provider is unconfigured in tests: the gate must refuse before any call.
     expect(byKey.traffic?.status).toBe("skipped");
     expect((byKey.traffic?.metadataJson as { blockedBy: string }).blockedBy).toBe("provider_state");
+    // Same for the paid authority provider: no captcha solver is configured in tests.
+    expect(byKey.authority?.status).toBe("skipped");
+    expect((byKey.authority?.metadataJson as { blockedBy: string }).blockedBy).toBe(
+      "provider_state",
+    );
     expect((byKey.candidate_gate?.metadataJson as { outcome: string }).outcome).toBe("passed");
 
     const score = await tdb.db.query.domainScores.findFirst({
@@ -159,6 +224,97 @@ describe("domain-core pipeline (integration)", () => {
     const detail = await getDomainDetail(tdb.db, domain.id);
     expect(detail.runs.length).toBe(1);
     expect(detail.latestScore?.id).toBe(score?.id);
+  });
+
+  it("looks up the Domain Rating after the rules and bills exactly one captcha solve", async () => {
+    const ctx = createTestContext(tdb.db);
+    ctx.providers.dns = new FakeDns(true);
+    const ahrefs = fakeAhrefs({
+      domainRating: 31,
+      backlinks: 900,
+      refdomains: 55,
+      dofollowBacklinks: 700,
+      dofollowRefdomains: 40,
+    });
+    ctx.providers.ahrefs = ahrefs.provider;
+    // Any disposition qualifies here: what this test proves is the stage wiring, not the seeded
+    // ruleset's verdict. The disposition filter has its own case below.
+    await updateAuthorityGateSettings(
+      tdb.db,
+      { enabled: true, allowedDispositions: [], requireCandidateGate: false },
+      null,
+    );
+
+    const n = requireNormalized("autoridade.com.br");
+    const domain = await upsertDomain(ctx.db, n, "manual");
+    const { run } = await requestAnalysis(ctx, {
+      domainId: domain.id,
+      triggerType: "manual",
+    });
+    const processed = await ctx.stub.drain(ctx);
+    // The stage runs between the rule engine and the scoring, never before.
+    const stages = processed.map((p) => p.stage);
+    expect(stages.indexOf("authority")).toBeGreaterThan(stages.indexOf("rules"));
+    expect(stages.indexOf("authority")).toBeLessThan(stages.indexOf("score"));
+
+    const steps = await getRunSteps(tdb.db, run.id);
+    const step = steps.find((s) => s.stepKey === "authority");
+    expect(step?.status).toBe("completed");
+    expect((step?.metadataJson as { outcome: string }).outcome).toBe("measured");
+    expect(ahrefs.solver.solves).toBe(1);
+    expect(ahrefs.calls()).toBe(1);
+
+    const metrics = toMetricContext(await latestObservations(tdb.db, domain.id));
+    expect(metrics["authority.domain_rating"]).toMatchObject({ state: "measured", value: 31 });
+    expect(metrics["authority.dofollow_ratio"]?.value).toBeCloseTo(40 / 55, 3);
+
+    // The summary cache the explorer sorts on is filled from the same values.
+    const summary = await tdb.db.query.domainSummaries.findFirst({
+      where: eq(domainSummaries.domainId, domain.id),
+    });
+    expect(summary?.domainRating).toBe(31);
+    expect(summary?.referringDomains).toBe(55);
+    expect(summary?.hasAuthorityData).toBe(true);
+
+    // One ledger row per lookup, carrying the price of the solve.
+    const ledger = await tdb.db
+      .select()
+      .from(providerRequests)
+      .where(eq(providerRequests.analysisRunId, run.id));
+    const row = ledger.find((r) => r.providerKey === "ahrefs");
+    expect(row?.estimatedCostUsd).toBeCloseTo(0.002, 6);
+    expect(row?.unitsUsed).toBe(1);
+  });
+
+  it("never pays for a domain whose disposition the authority gate excludes", async () => {
+    const ctx = createTestContext(tdb.db);
+    ctx.providers.dns = new FakeDns(true);
+    const ahrefs = fakeAhrefs({ domainRating: 90, backlinks: 1, refdomains: 1 });
+    ctx.providers.ahrefs = ahrefs.provider;
+    // A clean, resolving domain is never rejected by the seeded ruleset, so restricting the
+    // gate to "rejected" is a disposition no run here can satisfy.
+    await updateAuthorityGateSettings(
+      tdb.db,
+      { enabled: true, allowedDispositions: ["rejected"] },
+      null,
+    );
+
+    const n = requireNormalized("negado.com.br");
+    const domain = await upsertDomain(ctx.db, n, "manual");
+    const { run } = await requestAnalysis(ctx, { domainId: domain.id, triggerType: "manual" });
+    await ctx.stub.drain(ctx);
+
+    const steps = await getRunSteps(tdb.db, run.id);
+    const step = steps.find((s) => s.stepKey === "authority");
+    expect(step?.status).toBe("skipped");
+    expect((step?.metadataJson as { blockedBy: string }).blockedBy).toBe("disposition");
+    expect(ahrefs.solver.solves).toBe(0);
+    expect(ahrefs.calls()).toBe(0);
+    // The run still finishes: a refused paid lookup is not a failure.
+    const finished = await tdb.db.query.analysisRuns.findFirst({
+      where: eq(analysisRuns.id, run.id),
+    });
+    expect(finished?.status).toBe("completed");
   });
 
   it("reuses fresh observations on reanalysis and creates new versioned rows", async () => {
@@ -390,37 +546,54 @@ describe("domain-core pipeline (integration)", () => {
     const retried = await retryRun(ctx, run.id, null);
     expect(retried.triggerReference).toBe(run.id);
     expect(retried.forceRefresh).toBe(true);
-    await tdb.db
-      .insert(domainObservations)
-      .values({
-        domainId: domain.id,
-        providerKey: "semrush",
-        metricKey: "seo.authority",
-        valueType: "numeric",
-        valueNumeric: 42,
-        state: "measured",
-        licenseClass: "provider_restricted",
-        observedAt: new Date(Date.now() - 40 * 24 * 3600 * 1000),
-      });
-    // Paid traffic values are mirrored into the summary cache; retention must clear both.
     await tdb.db.insert(domainObservations).values({
       domainId: domain.id,
-      providerKey: "dataforseo",
-      metricKey: "traffic.visits_total",
+      providerKey: "semrush",
+      metricKey: "seo.authority",
       valueType: "numeric",
-      valueNumeric: 1040,
+      valueNumeric: 42,
       state: "measured",
       licenseClass: "provider_restricted",
       observedAt: new Date(Date.now() - 40 * 24 * 3600 * 1000),
     });
+    // Paid traffic and authority values are mirrored into the summary cache; retention must
+    // clear the observation and the cache together, for both providers.
+    await tdb.db.insert(domainObservations).values([
+      {
+        domainId: domain.id,
+        providerKey: "dataforseo",
+        metricKey: "traffic.visits_total",
+        valueType: "numeric",
+        valueNumeric: 1040,
+        state: "measured",
+        licenseClass: "provider_restricted",
+        observedAt: new Date(Date.now() - 40 * 24 * 3600 * 1000),
+      },
+      {
+        domainId: domain.id,
+        providerKey: "ahrefs",
+        metricKey: "authority.domain_rating",
+        valueType: "numeric",
+        valueNumeric: 31,
+        state: "measured",
+        licenseClass: "provider_restricted",
+        observedAt: new Date(Date.now() - 40 * 24 * 3600 * 1000),
+      },
+    ]);
     await tdb.db
       .update(domainSummaries)
-      .set({ trafficVisitsTotal: 1040, hasTrafficData: true })
+      .set({
+        trafficVisitsTotal: 1040,
+        hasTrafficData: true,
+        domainRating: 31,
+        hasAuthorityData: true,
+      })
       .where(eq(domainSummaries.domainId, domain.id));
 
     const report = await runRetention(tdb.db, { restrictedRetentionDays: 30 });
-    expect(report.purgedRestrictedObservations).toBe(2);
+    expect(report.purgedRestrictedObservations).toBe(3);
     expect(report.clearedTrafficSummaries).toBe(1);
+    expect(report.clearedAuthoritySummaries).toBe(1);
     const purged = await tdb.db.query.domainObservations.findFirst({
       where: eq(domainObservations.metricKey, "seo.authority"),
     });
@@ -431,5 +604,7 @@ describe("domain-core pipeline (integration)", () => {
     });
     expect(cachedSummary?.trafficVisitsTotal).toBeNull();
     expect(cachedSummary?.hasTrafficData).toBeNull();
+    expect(cachedSummary?.domainRating).toBeNull();
+    expect(cachedSummary?.hasAuthorityData).toBeNull();
   });
 });

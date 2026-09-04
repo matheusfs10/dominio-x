@@ -61,6 +61,7 @@ export const domainSortFields = [
   "seo_score",
   "risk_score",
   "traffic_visits",
+  "domain_rating",
 ] as const;
 
 const optionalBool = z
@@ -90,6 +91,11 @@ export const listDomainsQuerySchema = paginationQuerySchema.extend({
   hasTraffic: optionalBool,
   /** Minimum estimated visits over the whole traffic window, for the configured location. */
   minVisits: z.coerce.number().min(0).optional(),
+  hasAuthority: optionalBool,
+  /** Minimum vendor Domain Rating (0..100, logarithmic). */
+  minDomainRating: z.coerce.number().min(0).max(100).optional(),
+  /** Minimum number of referring domains reported by the backlink index. */
+  minReferringDomains: z.coerce.number().int().min(0).optional(),
   hasDns: optionalBool,
   httpStatus: z.coerce.number().int().optional(),
   shortlisted: optionalBool,
@@ -264,9 +270,65 @@ export const trafficGateSettingsSchema = z.object({
 });
 export type TrafficGateSettings = z.infer<typeof trafficGateSettingsSchema>;
 
+/**
+ * Free qualification policy for the paid authority provider (Ahrefs backlink checker).
+ *
+ * Same cheap-first contract as the traffic gate: everything decided here uses evidence the
+ * platform already owns for nothing (lexical, DNS, crawler, candidate gate, the rule engine's
+ * disposition) plus counters from our own ledger. The money it protects is the captcha-solving
+ * balance, which is spent per lookup whether or not the lookup finds anything.
+ *
+ * This stage runs *after* the rule engine, so `allowedDispositions` is the strongest filter
+ * available: a domain the rules already rejected never reaches the provider.
+ */
+export const authorityGateSettingsSchema = z.object({
+  /** Master switch for the automatic pipeline lookup. When false, only forced lookups run. */
+  enabled: z.boolean().default(false),
+
+  // --- Rule engine outcome (free: the `rules` stage already ran) ---
+  /** Only look up domains whose automatic disposition is in this list. Empty = any. */
+  allowedDispositions: z.array(z.enum(DISPOSITIONS)).max(4).default(["accepted"]),
+  /** Reuse the candidate gate decision as a precondition. */
+  requireCandidateGate: z.boolean().default(true),
+  /** Minimum overall score of the current run. null = no minimum. */
+  minOverallScore: z.number().min(0).max(100).nullable().default(null),
+
+  // --- Name shape (free: lexical provider) ---
+  maxDigits: z.number().int().min(0).max(63).default(0),
+  maxHyphens: z.number().int().min(0).max(63).default(1),
+  minSldLength: z.number().int().min(1).max(63).default(3),
+  maxSldLength: z.number().int().min(1).max(63).default(20),
+  maxRandomness: z.number().min(0).max(1).default(0.6),
+  allowPunycode: z.boolean().default(false),
+  requireDictionaryToken: z.boolean().default(false),
+  /** Empty list = any TLD. Values are compared against the normalized public suffix. */
+  allowedTlds: z.array(z.string().min(1).max(63)).max(50).default(["com.br", "br"]),
+
+  // --- Network evidence (free: DNS + isolated crawler) ---
+  requireDnsResolution: z.boolean().default(true),
+  requireHttpReachable: z.boolean().default(false),
+  /** Only ask the provider about hosts that answered with one of these statuses. Empty = any. */
+  allowedHttpStatuses: z.array(z.number().int().min(100).max(599)).max(20).default([]),
+
+  // --- Volume caps (free: our own ledger) ---
+  /** Skip the call when a measurement younger than this exists. 0 = always re-query. */
+  reuseWithinDays: z.number().int().min(0).max(365).default(30),
+  maxLookupsPerBatch: z.number().int().min(0).nullable().default(50),
+  maxLookupsPerDay: z.number().int().min(0).nullable().default(200),
+  maxLookupsPerMonth: z.number().int().min(0).nullable().default(2000),
+
+  // --- Money caps (free: our own ledger + the solver's free balance endpoint) ---
+  /** Hard stop in USD for a calendar month (UTC). null = only the env ceiling applies. */
+  monthlyCostBudgetUsd: z.number().min(0).nullable().default(10),
+  /** Refuse to call when the captcha solver balance is below this. 0 = do not check it. */
+  minSolverBalanceUsd: z.number().min(0).default(0),
+});
+export type AuthorityGateSettings = z.infer<typeof authorityGateSettingsSchema>;
+
 export const updateSettingsBodySchema = z.object({
   candidateGate: candidateGateSettingsSchema.partial().optional(),
   trafficGate: trafficGateSettingsSchema.partial().optional(),
+  authorityGate: authorityGateSettingsSchema.partial().optional(),
 });
 
 // ---------------------------------------------------------------------------

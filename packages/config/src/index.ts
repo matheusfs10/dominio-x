@@ -132,6 +132,75 @@ export const dataForSeoSchema = z.object({
   DATAFORSEO_TIMEOUT_MS: intFrom(20_000),
 });
 
+/**
+ * CapSolver — captcha solving service used to obtain the Cloudflare Turnstile token the
+ * Ahrefs free tools require. Priced per solved token, so it is treated as a paid provider:
+ * the cost of one Ahrefs lookup *is* the cost of one solve.
+ */
+export const capSolverSchema = z.object({
+  CAPSOLVER_ENABLED: bool.default(false),
+  CAPSOLVER_API_KEY: optionalString,
+  CAPSOLVER_BASE_URL: z.string().url().default("https://api.capsolver.com"),
+  /** Optional developer/app id from the CapSolver dashboard. */
+  CAPSOLVER_APP_ID: optionalString,
+  /** Timeout of a single call to the solver's own API. */
+  CAPSOLVER_TIMEOUT_MS: intFrom(20_000),
+  /** Gap between `getTaskResult` polls. The vendor documents 3s as the recommended value. */
+  CAPSOLVER_POLL_INTERVAL_MS: z.coerce.number().int().min(500).max(30_000).default(3_000),
+  /** Give up on a task after this long. The vendor times a task out at 120s. */
+  CAPSOLVER_MAX_WAIT_MS: z.coerce.number().int().min(5_000).max(300_000).default(120_000),
+  /** Seconds to cache the free balance lookup. */
+  CAPSOLVER_BALANCE_CACHE_SECONDS: z.coerce.number().int().min(0).default(300),
+  /**
+   * Price of one solved token in USD, from the vendor's price list. The API does not report a
+   * per-task price, so this is what the request ledger records as the cost of a lookup.
+   */
+  CAPSOLVER_COST_PER_SOLVE_USD: z.coerce.number().min(0).default(0.001),
+});
+
+/**
+ * Ahrefs — Domain Rating from the public backlink checker.
+ *
+ * There is no API key: the free tool is protected by Cloudflare Turnstile, and every lookup
+ * needs a freshly solved token (see `capSolverSchema`). The provider is therefore "paid" in
+ * captcha credits rather than in vendor credits, and it stays disabled until an operator
+ * turns it on. Nothing here is required to boot: with the provider off the authority stage is
+ * skipped and the run stays valid.
+ */
+const DEFAULT_AHREFS_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+  "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
+
+export const ahrefsSchema = z.object({
+  AHREFS_ENABLED: bool.default(false),
+  AHREFS_BASE_URL: z.string().url().default("https://ahrefs.com"),
+  /** URL matching mode of the lookup. `subdomains` matches the tool's own default. */
+  AHREFS_MODE: z.enum(["exact", "prefix", "domain", "subdomains"]).default("subdomains"),
+  /** Scheme used to build the submitted URL from a domain name. */
+  AHREFS_TARGET_SCHEME: z.enum(["https", "http"]).default("https"),
+  /** Turnstile site key of the free tools, needed by the solver. */
+  AHREFS_TURNSTILE_SITEKEY: z.string().min(8).default("0x4AAAAAAAAzi9ITzSN9xKMi"),
+  /** Empty falls back to the default: an unset browser agent is refused by the tool. */
+  AHREFS_USER_AGENT: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.trim().length > 0 ? v.trim() : DEFAULT_AHREFS_USER_AGENT)),
+  /** Sent as `X-Client-Version` when set; the tool sends its own build id. */
+  AHREFS_CLIENT_VERSION: optionalString,
+  /**
+   * Escape hatch for a `cf_clearance` cookie obtained out of band. Only needed when the
+   * upstream WAF starts challenging the egress IP; leave empty otherwise.
+   */
+  AHREFS_COOKIE: optionalString,
+  /** Deliberately slow: this is a public free tool, not a metered API. */
+  AHREFS_MAX_RPS: z.coerce.number().min(0.01).max(5).default(0.2),
+  AHREFS_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(1),
+  AHREFS_DATA_TTL_DAYS: z.coerce.number().min(1).default(30),
+  /** Upper bound in USD for a calendar month (UTC); the DB setting may lower it further. */
+  AHREFS_MONTHLY_COST_BUDGET_USD: z.coerce.number().min(0).optional(),
+  AHREFS_TIMEOUT_MS: intFrom(30_000),
+});
+
 export const pipelineSchema = z.object({
   PIPELINE_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(100).default(5),
   DNS_TTL_HOURS: z.coerce.number().min(0).default(24),
@@ -172,6 +241,8 @@ export const apiConfigSchema = baseSchema
   .extend(securitySchema.shape)
   .extend(semrushSchema.shape)
   .extend(dataForSeoSchema.shape)
+  .extend(capSolverSchema.shape)
+  .extend(ahrefsSchema.shape)
   .extend(pipelineSchema.shape)
   .extend(registroBrSchema.shape)
   .extend({
@@ -197,6 +268,8 @@ export const workerConfigSchema = baseSchema
   .extend(redisSchema.shape)
   .extend(semrushSchema.shape)
   .extend(dataForSeoSchema.shape)
+  .extend(capSolverSchema.shape)
+  .extend(ahrefsSchema.shape)
   .extend(pipelineSchema.shape)
   .and(storageSchema);
 
@@ -215,6 +288,8 @@ export type SchedulerConfig = z.infer<typeof schedulerConfigSchema>;
 export type CrawlerConfig = z.infer<typeof crawlerConfigSchema>;
 export type SemrushConfig = z.infer<typeof semrushSchema>;
 export type DataForSeoConfig = z.infer<typeof dataForSeoSchema>;
+export type CapSolverConfig = z.infer<typeof capSolverSchema>;
+export type AhrefsConfig = z.infer<typeof ahrefsSchema>;
 export type PipelineConfig = z.infer<typeof pipelineSchema>;
 export type StorageConfig = z.infer<typeof storageSchema>;
 

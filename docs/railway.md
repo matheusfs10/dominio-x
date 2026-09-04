@@ -52,6 +52,27 @@ CRAWLER_ENABLED=true  SEMRUSH_ENABLED=false (standby)  SEMRUSH_DATA_TTL_DAYS=30 
 `api` adds `PORT=4000 HOST=:: TRUST_PROXY=true`. `web`: `NODE_ENV=production`,
 `API_INTERNAL_URL=http://${{api.RAILWAY_PRIVATE_DOMAIN}}:4000`, `API_URL`, `APP_URL`.
 
+### Paid providers (opt-in, set by hand)
+
+None of these is required to boot: every one has a default and an unset provider simply reports
+`not_configured`, so its stage is skipped and the run stays valid. They are **created by hand in
+the dashboard** on `api` and `worker` after the code that reads them is deployed — the
+`variables` command never writes credentials.
+
+```
+DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD     DATAFORSEO_ENABLED=true      # estimated search traffic
+CAPSOLVER_API_KEY                          CAPSOLVER_ENABLED=true       # captcha solver
+                                           AHREFS_ENABLED=true          # Domain Rating
+```
+
+`api` needs the CapSolver key only for the "Consultar saldo" button in Settings; `worker` is what
+actually spends it. `scheduler-registro-br` needs neither, and `crawler` (other project) must never
+see them.
+
+Re-running `variables` rewrites `SEMRUSH_ENABLED`, `DATAFORSEO_ENABLED`, `CAPSOLVER_ENABLED` and
+`AHREFS_ENABLED` back to `false` — the flags are seeded off on purpose. It never touches the
+credentials themselves. After a provisioning run, turn the flags back on.
+
 Bootstrap admin: set `BOOTSTRAP_ADMIN_EMAIL`/`BOOTSTRAP_ADMIN_PASSWORD` on `api` once and execute
 `node packages/database/dist/seed.js --no-dev` (Railway → api → one-off command, or `railway run`),
 then remove both variables. Alternative: `node packages/database/dist/admin-create.js --email you@example.com`
@@ -89,7 +110,7 @@ obvious attempts silently do nothing:
 - **pre-deploy is not shell-parsed.** `["a && b"]` passes `&&` and `b` as argv to `a`; only the
   first program runs. Set the single command you want instead.
 - **`deploymentRedeploy` replays the original deployment's config snapshot**, so a settings change
-  made after that deployment is ignored. A *fresh* deployment is required — and `deploy` skips the
+  made after that deployment is ignored. A _fresh_ deployment is required — and `deploy` skips the
   build when nothing matches `watchPatterns`, so clear the patterns for that one run.
 
 Sequence: set `preDeployCommand` to the one-off, set `watchPatterns` to `[]`, run

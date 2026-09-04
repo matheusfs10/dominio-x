@@ -1,5 +1,13 @@
 import type { Redis } from "ioredis";
-import type { DataForSeoConfig, PipelineConfig, SemrushConfig } from "@dominio-x/config";
+import type {
+  AhrefsConfig,
+  CapSolverConfig,
+  DataForSeoConfig,
+  PipelineConfig,
+  SemrushConfig,
+} from "@dominio-x/config";
+import { AhrefsProvider } from "./ahrefs/index.js";
+import { CapSolver } from "./capsolver/index.js";
 import { DataForSeoProvider } from "./dataforseo/index.js";
 import { DnsProvider } from "./dns/index.js";
 import { LexicalProvider } from "./lexical/index.js";
@@ -13,6 +21,9 @@ export interface ProviderRegistry {
   rdap: RdapProvider;
   semrush: SemrushProvider;
   dataforseo: DataForSeoProvider;
+  ahrefs: AhrefsProvider;
+  /** Not an enrichment provider: a paid dependency of the providers behind a challenge. */
+  capsolver: CapSolver;
   all(): EnrichmentProvider[];
   get(key: string): EnrichmentProvider | undefined;
 }
@@ -21,6 +32,8 @@ export function createProviderRegistry(options: {
   pipeline: PipelineConfig;
   semrush: SemrushConfig;
   dataforseo: DataForSeoConfig;
+  capsolver: CapSolverConfig;
+  ahrefs: AhrefsConfig;
   redis?: Redis;
 }): ProviderRegistry {
   const lexical = new LexicalProvider();
@@ -31,13 +44,21 @@ export function createProviderRegistry(options: {
   });
   const semrush = new SemrushProvider({ config: options.semrush, redis: options.redis });
   const dataforseo = new DataForSeoProvider({ config: options.dataforseo, redis: options.redis });
-  const list: EnrichmentProvider[] = [lexical, dns, rdap, semrush, dataforseo];
+  const capsolver = new CapSolver({ config: options.capsolver });
+  const ahrefs = new AhrefsProvider({
+    config: options.ahrefs,
+    solver: capsolver,
+    redis: options.redis,
+  });
+  const list: EnrichmentProvider[] = [lexical, dns, rdap, semrush, dataforseo, ahrefs];
   return {
     lexical,
     dns,
     rdap,
     semrush,
     dataforseo,
+    ahrefs,
+    capsolver,
     all: () => list,
     get: (key) => list.find((p) => p.key === key),
   };

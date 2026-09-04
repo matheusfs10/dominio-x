@@ -94,6 +94,33 @@ Legend: [x] done · [~] partial / blocked · [ ] not started
       bloqueados, 67 palavras da whitelist intactas)
 - [x] `docs/content-rules.md` — política, superfícies, limites do DSL e procedimento de ativação
 - [ ] Reanálise do acervo já ingerido para aplicar as regras aos 158.227 domínios (decisão do operador)
+## M13 — Ahrefs (Domain Rating)
+- [x] Adapter isolado `packages/providers/src/ahrefs/` (client + mapping); nenhuma URL ou campo
+      do fornecedor fora do diretório
+- [x] Adapter isolado `packages/providers/src/capsolver/` para o captcha, atrás da interface
+      neutra `CaptchaSolver` (`captcha.ts`) — o adapter do Ahrefs não sabe qual serviço resolve
+- [x] Endpoint `POST /v4/stGetFreeBacklinksOverview` (`{ url, mode, captcha }` →
+      `domainRating`, `backlinks`, `refdomains`, dofollow); modo configurável
+      (`exact|prefix|domain|subdomains`, padrão `subdomains`)
+- [x] **Gate gratuito de qualificação** (`authority-gate.ts` sobre as primitivas de `gate.ts`):
+      disposição das regras, gate de candidatos, nota mínima, forma do nome, evidência de rede,
+      carência por domínio, limites por lote/dia/mês, orçamento mensal em US$ e saldo mínimo do
+      resolvedor de captcha
+- [x] Estágio `authority` no pipeline **após `rules`** (decisão do operador), reuso por TTL,
+      motivo do bloqueio registrado por checagem; `PIPELINE_VERSION` 1.2.0
+- [x] Ledger: uma linha por tentativa com o custo do solve — inclusive quando o captcha foi pago e
+      a consulta seguinte falhou (`prepaidCallCounters` conta por dinheiro gasto, não por sucesso)
+- [x] Migração `0002_ahrefs_authority` (colunas de autoridade em `domain_summaries`)
+- [x] UI pt-BR: card de autoridade no domínio, formulário do gate em Configurações, custos e
+      bloqueios em Uso e custos, coluna DR + filtros e ordenação no explorador, etapa no funil
+- [x] Nenhum modelo de pontuação usa o DR (decisão do operador): valor fica como evidência,
+      filtrável e ordenável, disponível para as regras na análise seguinte
+- [ ] Verificação em produção com a chave real do CapSolver (aguarda o operador definir os limites
+      e ligar `CAPSOLVER_ENABLED` + `AHREFS_ENABLED`)
+
+## Quality gates (local, 2026-09-04 — Ahrefs rebaseado sobre as regras de conteúdo)
+- [x] `pnpm lint` · `pnpm typecheck` (19/19) · `pnpm test` (380 passed, 2 skipped without Redis) ·
+      `pnpm build` (6/6) · `pnpm db:generate` sem drift de schema
 
 ## Quality gates (local + CI, 2026-09-04)
 - [x] `pnpm lint` · `pnpm typecheck` (19/19) · `pnpm test` (160 passed, 2 skipped without Redis) ·

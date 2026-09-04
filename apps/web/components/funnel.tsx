@@ -10,6 +10,7 @@ const STEPS: [string, string][] = [
   ["gatePassed", "Passaram no gate"],
   ["paidAnalyzed", "Análise paga (SEO)"],
   ["trafficLookedUp", "Consulta paga de tráfego"],
+  ["authorityLookedUp", "Consulta paga de autoridade"],
   ["highPotential", "Alto potencial (≥70)"],
   ["shortlisted", "Em shortlist"],
   ["failed", "Falharam"],

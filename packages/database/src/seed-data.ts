@@ -100,6 +100,22 @@ export const SEED_PROVIDERS = [
       note: "Runs only behind the free traffic gate (Settings > Gate de tráfego). Cost is read from the provider response.",
     },
   },
+  {
+    key: PROVIDER_KEYS.AHREFS,
+    name: "Ahrefs (Domain Rating)",
+    enabled: true,
+    paid: true,
+    capabilities: ["authority", "backlinks"],
+    rateLimitRps: 0.2,
+    concurrencyLimit: 1,
+    timeoutMs: 30_000,
+    defaultTtlHours: 24 * 30,
+    retentionPolicy: "provider_restricted",
+    configJson: {
+      endpoint: "ahrefs.free_backlink_checker",
+      note: "Runs after the rule engine and only behind the free authority gate (Settings > Gate de autoridade). Each lookup costs one captcha solve.",
+    },
+  },
 ];
 
 export const SEED_SCORE_MODEL_V1 = {

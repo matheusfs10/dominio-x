@@ -35,6 +35,12 @@ import {
   startStep,
   stepAlreadyDone,
 } from "./analysis.js";
+import {
+  decideAuthorityGate,
+  evaluateAuthorityBudget,
+  evaluateAuthorityQualification,
+  type AuthorityGateDecision,
+} from "./authority-gate.js";
 import { recordOperationalEvent } from "./audit.js";
 import type { CoreContext } from "./context.js";
 import { createCrawlerJob, expireCrawlerJobForRun } from "./crawler-jobs.js";
@@ -50,14 +56,18 @@ import {
   toMetricContext,
 } from "./observations.js";
 import { getActiveCompiledRuleset } from "./rulesets.js";
-import { getCandidateGateSettings, getTrafficGateSettings } from "./settings.js";
+import {
+  getAuthorityGateSettings,
+  getCandidateGateSettings,
+  getTrafficGateSettings,
+} from "./settings.js";
 import {
   decideTrafficGate,
   evaluateTrafficBudget,
   evaluateTrafficQualification,
   type TrafficGateDecision,
 } from "./traffic-gate.js";
-import { monthlyUnitsUsed, providerCallCounters } from "./usage.js";
+import { monthlyUnitsUsed, prepaidCallCounters, providerCallCounters } from "./usage.js";
 
 export interface JobMeta {
   attemptsMade: number;
@@ -72,7 +82,8 @@ const NEXT: Partial<Record<PipelineStage, PipelineStage>> = {
   candidate_gate: "seo",
   seo: "traffic",
   traffic: "rules",
-  rules: "score",
+  rules: "authority",
+  authority: "score",
   score: "complete",
 };
 
@@ -164,6 +175,9 @@ export async function processStage(
         break;
       case "rules":
         await stageRules(ctx, sc);
+        break;
+      case "authority":
+        await stageAuthority(ctx, sc);
         break;
       case "score":
         await stageScore(ctx, sc);
@@ -392,6 +406,17 @@ async function syncSummaryFromProvider(
         trafficVisitsLastMonth: measuredNumeric(metrics, METRICS.TRAFFIC_VISITS_LAST_MONTH),
         trafficTrendRatio: measuredNumeric(metrics, METRICS.TRAFFIC_TREND_RATIO),
         hasTrafficData: measuredBoolean(metrics, METRICS.TRAFFIC_HAS_DATA),
+        updatedAt: new Date(),
+      })
+      .where(eq(domainSummaries.domainId, domainId));
+  } else if (providerKey === PROVIDER_KEYS.AHREFS) {
+    await db
+      .update(domainSummaries)
+      .set({
+        domainRating: measuredNumeric(metrics, METRICS.AUTHORITY_DOMAIN_RATING),
+        referringDomains: measuredNumeric(metrics, METRICS.AUTHORITY_REFERRING_DOMAINS),
+        backlinks: measuredNumeric(metrics, METRICS.AUTHORITY_BACKLINKS),
+        hasAuthorityData: measuredBoolean(metrics, METRICS.AUTHORITY_HAS_DATA),
         updatedAt: new Date(),
       })
       .where(eq(domainSummaries.domainId, domainId));
@@ -908,6 +933,231 @@ async function stageRules(ctx: CoreContext, sc: StageContext): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Stage — authority (paid provider behind the free qualification gate)
+// ---------------------------------------------------------------------------
+
+/**
+ * Domain Rating and the backlink counts behind it, read from the Ahrefs backlink checker.
+ *
+ * The stage sits *after* the rule engine on purpose: by the time a domain reaches it the run
+ * already carries an automatic disposition, so the gate can refuse everything the rules did
+ * not accept before a single cent is spent. Each lookup costs one captcha solve, and that is
+ * charged whether or not the index knows the domain.
+ *
+ * Cheap-first, in this order, so the common case costs nothing:
+ *   1. fresh observations are reused (no call);
+ *   2. a domain measured inside the cooldown window is not re-measured (no call);
+ *   3. the free qualification gate (disposition, name shape, DNS/HTTP evidence) must pass;
+ *   4. volume and money caps from our own ledger must pass;
+ *   5. only then is one lookup issued, and its price is written to the request ledger.
+ * Every skip is recorded with the exact check that blocked it, so the usage dashboard can show
+ * where the funnel is losing candidates.
+ */
+async function stageAuthority(ctx: CoreContext, sc: StageContext): Promise<void> {
+  const { run, domain, log } = sc;
+  const provider = ctx.providers.ahrefs;
+  const step = await startStep(ctx.db, run.id, "authority", provider.key, 1);
+
+  /** Records why no paid lookup was made and moves the run on. */
+  const skip = async (
+    outcome: string,
+    reason: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<void> => {
+    await completeStep(ctx.db, step, {
+      status: "skipped",
+      errorCode: (extra.errorCode as string | undefined) ?? null,
+      metadata: { outcome, reason, ...extra },
+    });
+    await advance(ctx, run, "authority");
+  };
+
+  // 0. Cheapest possible exits, before touching the database for anything else. A batch of
+  //    150k domains must not pay four queries each for a provider that is switched off.
+  const runtimeState = provider.describeStatus().state;
+  if (runtimeState !== "ready") {
+    return skip(runtimeState, `provider ${runtimeState}`, {
+      blockedBy: "provider_state",
+      errorCode:
+        runtimeState === "disabled" || runtimeState === "solver_disabled"
+          ? "PROVIDER_DISABLED"
+          : "PROVIDER_NOT_CONFIGURED",
+    });
+  }
+  const settings = await getAuthorityGateSettings(ctx.db);
+  if (!settings.enabled && !run.forceDeep) {
+    return skip("gate_denied", "automatic authority lookups are disabled in settings", {
+      blockedBy: "gate_enabled",
+    });
+  }
+
+  // 1. Fresh data already on file — the cheapest possible outcome.
+  if (!run.forceRefresh) {
+    const fresh = await freshProviderObservations(ctx.db, domain.id, provider.key);
+    if (fresh) {
+      await completeStep(ctx.db, step, {
+        status: "completed",
+        metadata: {
+          outcome: "reused",
+          observations: fresh.length,
+          reusedFrom: fresh[0]?.analysisRunId ?? null,
+        },
+      });
+      await syncSummaryFromProvider(ctx.db, domain.id, provider.key, toMetricContext(fresh));
+      await advance(ctx, run, "authority");
+      return;
+    }
+
+    // 2. Cooldown: expired data still means we asked recently. Do not pay twice for it.
+    if (settings.reuseWithinDays > 0) {
+      const lastAt = await latestProviderObservationAt(ctx.db, domain.id, provider.key);
+      const cooldownMs = settings.reuseWithinDays * 24 * 3600 * 1000;
+      if (lastAt && Date.now() - lastAt.getTime() < cooldownMs) {
+        return skip(
+          "cooldown",
+          `measured ${lastAt.toISOString().slice(0, 10)}, cooldown ${settings.reuseWithinDays}d`,
+          { blockedBy: "cooldown" },
+        );
+      }
+    }
+  }
+
+  // 3. Free qualification gate. Nothing but evidence the run already produced, so a rejected
+  //    domain costs no extra query.
+  const runRow = await requireRun(ctx.db, run.id);
+  const summary = runRow.summaryJson as {
+    candidateGatePassed?: boolean;
+    rules?: RuleSummary | null;
+  };
+  const metrics = toMetricContext(await latestObservations(ctx.db, domain.id));
+  const providerState = await authorityRegistryState(ctx, runtimeState);
+  const qualification = evaluateAuthorityQualification({
+    settings,
+    metrics,
+    domain: { asciiFqdn: domain.asciiFqdn, tld: domain.tld },
+    candidateGatePassed: summary.candidateGatePassed ?? null,
+    disposition: summary.rules?.disposition ?? null,
+    // The score stage runs after this one, so the only score available is the one the last
+    // completed analysis left on the domain summary.
+    overallScore: settings.minOverallScore === null ? null : await lastOverallScore(ctx, domain.id),
+    providerState,
+  });
+  const qualified = decideAuthorityGate(qualification, { forced: run.forceDeep });
+  if (!qualified.eligible) return recordAuthorityDenial(ctx, sc, skip, qualified);
+
+  // 4. Volume and money caps. Only now is it worth aggregating the ledger.
+  const counters = await prepaidCallCounters(ctx.db, provider.key, {
+    sourceBatchId: run.sourceBatchId,
+  });
+  const estimate = await provider.estimate({
+    domain: providerDomain(domain),
+    analysisRunId: run.id,
+  });
+  // The solver balance lookup is free and cached, but only worth making when it can block.
+  let solverBalanceUsd: number | null = null;
+  if (settings.minSolverBalanceUsd > 0) {
+    try {
+      solverBalanceUsd = await provider.solverBalanceUsd();
+    } catch (error) {
+      log.warn({ err: error }, "could not read the captcha solver balance");
+    }
+  }
+  const decision = decideAuthorityGate(
+    [
+      ...qualification,
+      ...evaluateAuthorityBudget({
+        settings,
+        counters,
+        envMonthlyCostBudgetUsd: ctx.ahrefs.AHREFS_MONTHLY_COST_BUDGET_USD ?? null,
+        estimatedCallCostUsd: estimate.estimatedCostUsd,
+        solverBalanceUsd,
+      }),
+    ],
+    { forced: run.forceDeep },
+  );
+  if (!decision.eligible) return recordAuthorityDenial(ctx, sc, skip, decision);
+  await recordAuthorityGateDecision(ctx, sc, decision);
+
+  // 5. Spend.
+  const result = await provider.enrich({
+    domain: providerDomain(domain),
+    analysisRunId: run.id,
+    force: run.forceRefresh,
+  });
+  await persistProviderResult(ctx, sc, step, result);
+  log.info(
+    { costUsd: result.requests[0]?.estimatedCostUsd ?? 0, status: result.status },
+    "authority lookup done",
+  );
+  await advance(ctx, run, "authority");
+}
+
+/**
+ * An admin can also switch the provider off from the Providers page without a redeploy, which
+ * costs one indexed lookup. Only asked once the runtime configuration already said "ready".
+ */
+async function authorityRegistryState(ctx: CoreContext, runtimeState: string): Promise<string> {
+  if (runtimeState !== "ready") return runtimeState;
+  const row = await ctx.db.query.providers.findFirst({
+    where: eq(providers.key, PROVIDER_KEYS.AHREFS),
+  });
+  return row?.enabled === false ? "disabled_in_registry" : runtimeState;
+}
+
+/** Overall score left by the last completed analysis, or null when there is none yet. */
+async function lastOverallScore(ctx: CoreContext, domainId: string): Promise<number | null> {
+  const row = await ctx.db.query.domainSummaries.findFirst({
+    where: eq(domainSummaries.domainId, domainId),
+  });
+  return row?.overallScore ?? null;
+}
+
+/** Records the gate decision as evidence on the run and on the domain. */
+async function recordAuthorityGateDecision(
+  ctx: CoreContext,
+  sc: StageContext,
+  decision: AuthorityGateDecision,
+): Promise<void> {
+  const { run, domain } = sc;
+  await ctx.db.transaction(async (tx) => {
+    await recordObservations(
+      tx,
+      { domainId: domain.id, analysisRunId: run.id, providerKey: "internal" },
+      [
+        measuredObservation("internal.authority_gate_passed", decision.eligible, {
+          licenseClass: "internal",
+          ttlHours: null,
+          metadata: { blockedBy: decision.blockedBy, reasons: decision.reasons },
+        }),
+      ],
+    );
+    await mergeRunSummary(tx, run.id, {
+      authorityGatePassed: decision.eligible,
+      authorityGateBlockedBy: decision.blockedBy,
+      authorityGateReasons: decision.reasons,
+    });
+  });
+}
+
+async function recordAuthorityDenial(
+  ctx: CoreContext,
+  sc: StageContext,
+  skip: (outcome: string, reason: string, extra?: Record<string, unknown>) => Promise<void>,
+  decision: AuthorityGateDecision,
+): Promise<void> {
+  await recordAuthorityGateDecision(ctx, sc, decision);
+  sc.log.info(
+    { blockedBy: decision.blockedBy },
+    "authority lookup skipped by the free qualification gate",
+  );
+  await skip("gate_denied", decision.reasons.join("; "), {
+    blockedBy: decision.blockedBy,
+    checks: decision.checks,
+    errorCode: decision.blockedBy === "monthly_budget" ? "PROVIDER_BUDGET_EXHAUSTED" : undefined,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Stage G — score
 // ---------------------------------------------------------------------------
 async function stageScore(ctx: CoreContext, sc: StageContext): Promise<void> {
@@ -1074,6 +1324,10 @@ async function stageComplete(ctx: CoreContext, sc: StageContext): Promise<void> 
           dnsResolves: measuredBoolean(metrics, METRICS.DNS_RESOLVES),
           httpStatus: measuredNumeric(metrics, METRICS.HTTP_STATUS),
           hasSeoData: measuredNumeric(metrics, METRICS.SEO_ORGANIC_KEYWORDS) !== null,
+          domainRating: measuredNumeric(metrics, METRICS.AUTHORITY_DOMAIN_RATING),
+          referringDomains: measuredNumeric(metrics, METRICS.AUTHORITY_REFERRING_DOMAINS),
+          backlinks: measuredNumeric(metrics, METRICS.AUTHORITY_BACKLINKS),
+          hasAuthorityData: measuredBoolean(metrics, METRICS.AUTHORITY_HAS_DATA),
           candidateGatePassed: summary.candidateGatePassed ?? null,
           tagKeys: tagRows.map((t) => t.key),
           latestCompletedRunId: run.id,

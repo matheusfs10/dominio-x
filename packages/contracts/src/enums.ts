@@ -57,6 +57,7 @@ export const PIPELINE_STAGES = [
   "seo",
   "traffic",
   "rules",
+  "authority",
   "score",
   "complete",
 ] as const;
@@ -83,6 +84,7 @@ export const PROVIDER_KEYS = {
   CRAWLER: "crawler",
   SEMRUSH: "semrush",
   DATAFORSEO: "dataforseo",
+  AHREFS: "ahrefs",
 } as const;
 export type ProviderKey = (typeof PROVIDER_KEYS)[keyof typeof PROVIDER_KEYS];
 
@@ -94,6 +96,7 @@ export const PROVIDER_CAPABILITIES = [
   "backlinks",
   "traffic",
   "keywords",
+  "authority",
   "rdap",
   "reputation",
   "history",
@@ -210,8 +213,9 @@ export const AUDIT_ACTIONS = [
   "provider.updated",
   "settings.updated",
   "domain.traffic_lookup_requested",
+  "domain.authority_lookup_requested",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 export const NORMALIZATION_VERSION = 1;
-export const PIPELINE_VERSION = "1.1.0";
+export const PIPELINE_VERSION = "1.2.0";

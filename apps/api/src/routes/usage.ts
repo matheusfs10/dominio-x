@@ -17,7 +17,10 @@ export const usageRoutes: FastifyPluginAsync<{ deps: ApiDeps }> = async (app, { 
       const config = {
         semrush: deps.core.semrush,
         dataforseo: deps.core.dataforseo,
+        ahrefs: deps.core.ahrefs,
         trafficState: deps.core.providers.dataforseo.describeStatus().state,
+        authorityState: deps.core.providers.ahrefs.describeStatus().state,
+        solverState: deps.core.providers.capsolver.describeStatus().state,
       };
       return usageReport(deps.core.db, config, { days: request.query.days });
     },

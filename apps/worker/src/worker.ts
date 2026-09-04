@@ -32,6 +32,8 @@ async function main() {
     pipeline: config,
     semrush: config,
     dataforseo: config,
+    capsolver: config,
+    ahrefs: config,
     redis,
   });
   const core: CoreContext = {
@@ -42,6 +44,8 @@ async function main() {
     pipeline: config,
     semrush: config,
     dataforseo: config,
+    capsolver: config,
+    ahrefs: config,
     logger,
   };
 
@@ -51,7 +55,9 @@ async function main() {
         ? Math.min(config.PIPELINE_WORKER_CONCURRENCY, config.SEMRUSH_MAX_CONCURRENCY)
         : stage === "traffic"
           ? Math.min(config.PIPELINE_WORKER_CONCURRENCY, config.DATAFORSEO_MAX_CONCURRENCY)
-          : config.PIPELINE_WORKER_CONCURRENCY;
+          : stage === "authority"
+            ? Math.min(config.PIPELINE_WORKER_CONCURRENCY, config.AHREFS_MAX_CONCURRENCY)
+            : config.PIPELINE_WORKER_CONCURRENCY;
     const worker = createStageWorker(
       stage,
       async (job) => {
@@ -97,6 +103,7 @@ async function main() {
       crawler: config.CRAWLER_ENABLED,
       semrush: providers.semrush.describeStatus().state,
       dataforseo: providers.dataforseo.describeStatus().state,
+      ahrefs: providers.ahrefs.describeStatus().state,
     },
     "worker started",
   );

@@ -1,4 +1,10 @@
-import { dataForSeoSchema, pipelineSchema, semrushSchema } from "@dominio-x/config";
+import {
+  ahrefsSchema,
+  capSolverSchema,
+  dataForSeoSchema,
+  pipelineSchema,
+  semrushSchema,
+} from "@dominio-x/config";
 import { createLogger } from "@dominio-x/observability";
 import { createProviderRegistry } from "@dominio-x/providers";
 import type { QueueMap, StageJobData } from "@dominio-x/queue";
@@ -63,6 +69,7 @@ export function createStubQueues(): StubQueues {
     seo: makeQueue(),
     traffic: makeQueue(),
     rules: makeQueue(),
+    authority: makeQueue(),
     score: makeQueue(),
     complete: makeQueue(),
   } satisfies QueueMap;
@@ -96,6 +103,8 @@ export function createTestContext(
   const pipeline = pipelineSchema.parse(env);
   const semrush = semrushSchema.parse(env);
   const dataforseo = dataForSeoSchema.parse(env);
+  const capsolver = capSolverSchema.parse(env);
+  const ahrefs = ahrefsSchema.parse(env);
   const stub = createStubQueues();
   const storage = overrides.storage ?? new MemoryObjectStorage();
   const { env: _env, ...rest } = overrides;
@@ -103,10 +112,12 @@ export function createTestContext(
     db,
     storage,
     queues: stub.queues,
-    providers: createProviderRegistry({ pipeline, semrush, dataforseo }),
+    providers: createProviderRegistry({ pipeline, semrush, dataforseo, capsolver, ahrefs }),
     pipeline,
     semrush,
     dataforseo,
+    capsolver,
+    ahrefs,
     logger: createLogger({ service: "test", level: "silent" }),
     ...rest,
     stub,

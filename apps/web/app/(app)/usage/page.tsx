@@ -50,7 +50,18 @@ interface Usage {
     decisionPending: number;
     notConfigured: number;
   };
+  ahrefs: {
+    state: string;
+    lookupsToday: number;
+    lookupsThisMonth: number;
+    costThisMonthUsd: number;
+    monthlyCostBudgetUsd: number | null;
+    utilization: number | null;
+    mode: string;
+    solverState: string;
+  };
   trafficSkipped: { blockedBy: string; count: number }[];
+  authoritySkipped: { blockedBy: string; count: number }[];
 }
 
 export default function UsagePage() {
@@ -64,6 +75,8 @@ export default function UsagePage() {
   const u = q.data!;
   const trafficBlocked = u.trafficSkipped.reduce((acc, r) => acc + r.count, 0);
   const topBlocker = u.trafficSkipped[0] ?? null;
+  const authorityBlocked = u.authoritySkipped.reduce((acc, r) => acc + r.count, 0);
+  const topAuthorityBlocker = u.authoritySkipped[0] ?? null;
   return (
     <div>
       <PageHeader
@@ -109,6 +122,44 @@ export default function UsagePage() {
           <div
             className={`h-full ${(u.dataforseo.utilization ?? 0) > 0.9 ? "bg-rose-500" : "bg-emerald-500"}`}
             style={{ width: `${Math.min(100, (u.dataforseo.utilization ?? 0) * 100)}%` }}
+          />
+        </div>
+      )}
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat
+          label="Custo Ahrefs (mês)"
+          value={`US$ ${fmtNumber(u.ahrefs.costThisMonthUsd, 4)}`}
+          hint={
+            u.ahrefs.monthlyCostBudgetUsd !== null
+              ? `orçamento US$ ${fmtNumber(u.ahrefs.monthlyCostBudgetUsd, 2)} · ${fmtPercent(u.ahrefs.utilization)}`
+              : "sem orçamento mensal definido"
+          }
+        />
+        <Stat
+          label="Consultas de autoridade"
+          value={fmtNumber(u.ahrefs.lookupsThisMonth)}
+          hint={`${fmtNumber(u.ahrefs.lookupsToday)} hoje · modo ${u.ahrefs.mode}`}
+        />
+        <Stat
+          label="Barradas pelo gate de autoridade"
+          value={fmtNumber(authorityBlocked)}
+          hint={
+            topAuthorityBlocker
+              ? `mais comum: ${label(topAuthorityBlocker.blockedBy)} (${fmtNumber(topAuthorityBlocker.count)})`
+              : "nenhuma consulta barrada no período"
+          }
+        />
+        <Stat
+          label="Provedor de autoridade"
+          value={label(u.ahrefs.state)}
+          hint={`captcha: ${label(u.ahrefs.solverState)}`}
+        />
+      </div>
+      {u.ahrefs.monthlyCostBudgetUsd !== null && (
+        <div className="mb-4 h-2 w-full overflow-hidden rounded bg-neutral-200">
+          <div
+            className={`h-full ${(u.ahrefs.utilization ?? 0) > 0.9 ? "bg-rose-500" : "bg-amber-500"}`}
+            style={{ width: `${Math.min(100, (u.ahrefs.utilization ?? 0) * 100)}%` }}
           />
         </div>
       )}
@@ -183,9 +234,9 @@ export default function UsagePage() {
         </Card>
         <Card title="Onde o gate de tráfego barrou as consultas pagas">
           <p className="mb-3 text-xs text-neutral-500">
-            Cada linha é uma consulta ao DataForSEO que <strong>não</strong> foi feita, e a
-            checagem gratuita que a impediu. Se o funil estiver barrando demais, ajuste os limites
-            em Configurações › Gate de tráfego.
+            Cada linha é uma consulta ao DataForSEO que <strong>não</strong> foi feita, e a checagem
+            gratuita que a impediu. Se o funil estiver barrando demais, ajuste os limites em
+            Configurações › Gate de tráfego.
           </p>
           {u.trafficSkipped.length === 0 ? (
             <p className="text-xs text-neutral-500">Nenhuma consulta barrada no período.</p>
@@ -199,6 +250,34 @@ export default function UsagePage() {
               </thead>
               <tbody>
                 {u.trafficSkipped.map((r) => (
+                  <tr key={r.blockedBy}>
+                    <td>{label(r.blockedBy)}</td>
+                    <td>{fmtNumber(r.count)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+        <Card title="Onde o gate de autoridade barrou as consultas">
+          <p className="mb-3 text-xs text-neutral-500">
+            Cada linha é uma consulta de Domain Rating que <strong>não</strong> foi feita, e a
+            checagem gratuita que a impediu. Como o estágio roda depois das regras, o bloqueio mais
+            comum tende a ser a própria disposição automática. Ajuste os limites em Configurações ›
+            Gate de autoridade.
+          </p>
+          {u.authoritySkipped.length === 0 ? (
+            <p className="text-xs text-neutral-500">Nenhuma consulta barrada no período.</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Checagem</th>
+                  <th>Consultas barradas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {u.authoritySkipped.map((r) => (
                   <tr key={r.blockedBy}>
                     <td>{label(r.blockedBy)}</td>
                     <td>{fmtNumber(r.count)}</td>

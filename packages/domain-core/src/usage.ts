@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, isNull, sql } from "drizzle-orm";
 import { PROVIDER_KEYS } from "@dominio-x/contracts";
 import {
   analysisRuns,
@@ -8,8 +8,10 @@ import {
   type Db,
   type DbOrTx,
 } from "@dominio-x/database";
-import type { DataForSeoConfig, SemrushConfig } from "@dominio-x/config";
-import { getTrafficGateSettings } from "./settings.js";
+import type { AhrefsConfig, DataForSeoConfig, SemrushConfig } from "@dominio-x/config";
+import type { GateCounters } from "./gate.js";
+import { strictestBudget } from "./gate.js";
+import { getAuthorityGateSettings, getTrafficGateSettings } from "./settings.js";
 import { lowestBudget, type TrafficGateCounters } from "./traffic-gate.js";
 
 export function startOfMonthUtc(now = new Date()): Date {
@@ -82,6 +84,52 @@ export async function providerCallCounters(
   };
 }
 
+/**
+ * Billed-call counters for a provider whose price is paid up front, before the lookup that
+ * needed it can succeed — the captcha-solving providers.
+ *
+ * "Billed" here means "money left the account", which is `estimated_cost_usd > 0` rather than
+ * "the request succeeded": a solved captcha followed by a failed lookup has already been paid
+ * for, and must count against the caps. The money sum ignores `error_code` for the same reason.
+ */
+export async function prepaidCallCounters(
+  db: DbOrTx,
+  providerKey: string,
+  options: { sourceBatchId?: string | null; now?: Date } = {},
+): Promise<GateCounters> {
+  const now = options.now ?? new Date();
+  const paid = and(
+    eq(providerRequests.providerKey, providerKey),
+    gt(providerRequests.estimatedCostUsd, 0),
+  );
+  const sinceDay = gte(providerRequests.startedAt, startOfDayUtc(now));
+  const sinceMonth = gte(providerRequests.startedAt, startOfMonthUtc(now));
+  const [totals] = await db
+    .select({
+      today: sql<number>`count(*) filter (where ${sinceDay})::int`,
+      month: sql<number>`count(*) filter (where ${sinceMonth})::int`,
+      costMonth: sql<number>`coalesce(sum(${providerRequests.estimatedCostUsd}) filter (where ${sinceMonth}), 0)::float`,
+    })
+    .from(providerRequests)
+    .where(paid);
+
+  let lookupsInBatch: number | null = null;
+  if (options.sourceBatchId) {
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(providerRequests)
+      .innerJoin(analysisRuns, eq(analysisRuns.id, providerRequests.analysisRunId))
+      .where(and(paid, eq(analysisRuns.sourceBatchId, options.sourceBatchId)));
+    lookupsInBatch = row?.n ?? 0;
+  }
+  return {
+    lookupsToday: totals?.today ?? 0,
+    lookupsThisMonth: totals?.month ?? 0,
+    lookupsInBatch,
+    costThisMonthUsd: totals?.costMonth ?? 0,
+  };
+}
+
 export async function monthlyUnitsUsed(
   db: DbOrTx,
   providerKey: string,
@@ -144,13 +192,33 @@ export interface UsageReport {
     decisionPending: number;
     notConfigured: number;
   };
+  ahrefs: {
+    state: string;
+    lookupsToday: number;
+    lookupsThisMonth: number;
+    costThisMonthUsd: number;
+    monthlyCostBudgetUsd: number | null;
+    utilization: number | null;
+    /** URL matching mode the lookups use, and the state of the captcha solver behind them. */
+    mode: string;
+    solverState: string;
+  };
   /** Traffic lookups the free gate refused, grouped by the check that blocked them. */
   trafficSkipped: { blockedBy: string; count: number }[];
+  /** Authority lookups the free gate refused, grouped by the check that blocked them. */
+  authoritySkipped: { blockedBy: string; count: number }[];
 }
 
 export async function usageReport(
   db: Db,
-  config: { semrush: SemrushConfig; dataforseo: DataForSeoConfig; trafficState?: string },
+  config: {
+    semrush: SemrushConfig;
+    dataforseo: DataForSeoConfig;
+    ahrefs: AhrefsConfig;
+    trafficState?: string;
+    authorityState?: string;
+    solverState?: string;
+  },
   options: { days: number; now?: Date },
 ): Promise<UsageReport> {
   const now = options.now ?? new Date();
@@ -208,21 +276,31 @@ export async function usageReport(
     trafficGate.monthlyCostBudgetUsd,
     config.dataforseo.DATAFORSEO_MONTHLY_COST_BUDGET_USD ?? null,
   );
-  const trafficSkipped = await db
-    .select({
-      blockedBy: sql<string>`coalesce(${analysisSteps.metadataJson}->>'blockedBy', 'unknown')`,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(analysisSteps)
-    .where(
-      and(
-        eq(analysisSteps.stepKey, "traffic"),
-        eq(analysisSteps.status, "skipped"),
-        gte(analysisSteps.startedAt, since),
-      ),
-    )
-    .groupBy(sql`coalesce(${analysisSteps.metadataJson}->>'blockedBy', 'unknown')`)
-    .orderBy(sql`count(*) desc`);
+  const skippedByGate = (stepKey: "traffic" | "authority") =>
+    db
+      .select({
+        blockedBy: sql<string>`coalesce(${analysisSteps.metadataJson}->>'blockedBy', 'unknown')`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(analysisSteps)
+      .where(
+        and(
+          eq(analysisSteps.stepKey, stepKey),
+          eq(analysisSteps.status, "skipped"),
+          gte(analysisSteps.startedAt, since),
+        ),
+      )
+      .groupBy(sql`coalesce(${analysisSteps.metadataJson}->>'blockedBy', 'unknown')`)
+      .orderBy(sql`count(*) desc`);
+  const trafficSkipped = await skippedByGate("traffic");
+  const authoritySkipped = await skippedByGate("authority");
+
+  const authorityGate = await getAuthorityGateSettings(db);
+  const authorityCounters = await prepaidCallCounters(db, PROVIDER_KEYS.AHREFS, { now });
+  const authorityBudget = strictestBudget(
+    authorityGate.monthlyCostBudgetUsd,
+    config.ahrefs.AHREFS_MONTHLY_COST_BUDGET_USD ?? null,
+  );
 
   const [stepStats] = await db
     .select({
@@ -267,6 +345,16 @@ export async function usageReport(
       windowMonths: config.dataforseo.DATAFORSEO_WINDOW_MONTHS,
       locationName: config.dataforseo.DATAFORSEO_LOCATION_NAME,
     },
+    ahrefs: {
+      state: config.authorityState ?? "unknown",
+      lookupsToday: authorityCounters.lookupsToday,
+      lookupsThisMonth: authorityCounters.lookupsThisMonth,
+      costThisMonthUsd: authorityCounters.costThisMonthUsd,
+      monthlyCostBudgetUsd: authorityBudget,
+      utilization: authorityBudget ? authorityCounters.costThisMonthUsd / authorityBudget : null,
+      mode: config.ahrefs.AHREFS_MODE,
+      solverState: config.solverState ?? "unknown",
+    },
     cache: {
       reusedObservations: reused,
       providerCalls: measured,
@@ -279,6 +367,7 @@ export async function usageReport(
       notConfigured: stepStats?.notConfigured ?? 0,
     },
     trafficSkipped,
+    authoritySkipped,
   };
 }
 

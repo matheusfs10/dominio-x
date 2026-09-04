@@ -12,6 +12,8 @@ export interface RetentionReport {
   purgedRestrictedObservations: number;
   /** Domains whose mirrored traffic values were cleared from the summary cache. */
   clearedTrafficSummaries: number;
+  /** Domains whose mirrored authority values were cleared from the summary cache. */
+  clearedAuthoritySummaries: number;
   deletedSessions: number;
   deletedOperationalEvents: number;
   deletedCrawlerJobs: number;
@@ -64,26 +66,37 @@ export async function runRetention(
 
   // The summary table caches a few paid values so the explorer can sort and filter on them.
   // They are provider data and must disappear with the observation they came from.
-  const affected = [
-    ...new Set(
-      purged.filter((row) => row.metricKey.startsWith("traffic.")).map((row) => row.domainId),
-    ),
+  const domainsWith = (prefix: string): string[] => [
+    ...new Set(purged.filter((row) => row.metricKey.startsWith(prefix)).map((row) => row.domainId)),
   ];
-  let clearedTrafficSummaries = 0;
-  for (let i = 0; i < affected.length; i += 500) {
-    const cleared = await db
-      .update(domainSummaries)
-      .set({
-        trafficVisitsTotal: null,
-        trafficVisitsLastMonth: null,
-        trafficTrendRatio: null,
-        hasTrafficData: null,
-        updatedAt: now,
-      })
-      .where(inArray(domainSummaries.domainId, affected.slice(i, i + 500)))
-      .returning({ domainId: domainSummaries.domainId });
-    clearedTrafficSummaries += cleared.length;
-  }
+  const clearInBatches = async (
+    domainIds: string[],
+    values: Partial<typeof domainSummaries.$inferInsert>,
+  ): Promise<number> => {
+    let count = 0;
+    for (let i = 0; i < domainIds.length; i += 500) {
+      const cleared = await db
+        .update(domainSummaries)
+        .set({ ...values, updatedAt: now })
+        .where(inArray(domainSummaries.domainId, domainIds.slice(i, i + 500)))
+        .returning({ domainId: domainSummaries.domainId });
+      count += cleared.length;
+    }
+    return count;
+  };
+
+  const clearedTrafficSummaries = await clearInBatches(domainsWith("traffic."), {
+    trafficVisitsTotal: null,
+    trafficVisitsLastMonth: null,
+    trafficTrendRatio: null,
+    hasTrafficData: null,
+  });
+  const clearedAuthoritySummaries = await clearInBatches(domainsWith("authority."), {
+    domainRating: null,
+    referringDomains: null,
+    backlinks: null,
+    hasAuthorityData: null,
+  });
 
   const deletedSessions = await deleteExpiredSessions(db);
   const eventsCutoff = new Date(
@@ -106,6 +119,7 @@ export async function runRetention(
   return {
     purgedRestrictedObservations: purged.length,
     clearedTrafficSummaries,
+    clearedAuthoritySummaries,
     deletedSessions,
     deletedOperationalEvents: events.length,
     deletedCrawlerJobs: jobs.length,

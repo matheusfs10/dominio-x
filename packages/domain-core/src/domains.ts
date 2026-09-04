@@ -146,6 +146,7 @@ const SORT_COLUMNS = {
   seo_score: domainSummaries.seoScore,
   risk_score: domainSummaries.riskScore,
   traffic_visits: domainSummaries.trafficVisitsTotal,
+  domain_rating: domainSummaries.domainRating,
 } as const;
 
 export async function listDomains(db: Db, query: ListDomainsQuery): Promise<Page<DomainListItem>> {
@@ -192,6 +193,12 @@ export async function listDomains(db: Db, query: ListDomainsQuery): Promise<Page
     conditions.push(eq(domainSummaries.hasTrafficData, query.hasTraffic));
   if (query.minVisits !== undefined)
     conditions.push(gte(domainSummaries.trafficVisitsTotal, query.minVisits));
+  if (query.hasAuthority !== undefined)
+    conditions.push(eq(domainSummaries.hasAuthorityData, query.hasAuthority));
+  if (query.minDomainRating !== undefined)
+    conditions.push(gte(domainSummaries.domainRating, query.minDomainRating));
+  if (query.minReferringDomains !== undefined)
+    conditions.push(gte(domainSummaries.referringDomains, query.minReferringDomains));
   if (query.hasDns !== undefined) conditions.push(eq(domainSummaries.dnsResolves, query.hasDns));
   if (query.httpStatus !== undefined)
     conditions.push(eq(domainSummaries.httpStatus, query.httpStatus));
@@ -267,6 +274,8 @@ export async function listDomains(db: Db, query: ListDomainsQuery): Promise<Page
           return last.summary?.riskScore ?? null;
         case "traffic_visits":
           return last.summary?.trafficVisitsTotal ?? null;
+        case "domain_rating":
+          return last.summary?.domainRating ?? null;
       }
     })();
     nextCursor = encodeCursor({ v: raw, id: last.domain.id });

@@ -50,6 +50,7 @@ export const STATUS_TONE: Record<string, string> = {
   disabled: "bg-neutral-200 text-neutral-600",
   decision_pending: "bg-amber-100 text-amber-800",
   not_configured: "bg-rose-100 text-rose-800",
+  solver_disabled: "bg-neutral-200 text-neutral-600",
   ingesting: "bg-sky-100 text-sky-800",
   ingested: "bg-emerald-100 text-emerald-800",
   analyzing: "bg-sky-100 text-sky-800",
@@ -92,6 +93,7 @@ export const LABELS: Record<string, string> = {
   disabled: "desativado",
   decision_pending: "decisão pendente",
   not_configured: "não configurado",
+  solver_disabled: "resolvedor de captcha desativado",
   // batches
   ingesting: "ingerindo",
   ingested: "ingerido",
@@ -125,6 +127,7 @@ export const LABELS: Record<string, string> = {
   seo: "SEO",
   traffic: "tráfego (DataForSEO)",
   rules: "regras",
+  authority: "autoridade (Ahrefs)",
   score: "pontuação",
   complete: "conclusão",
   // decisão de candidato
@@ -149,6 +152,10 @@ export const LABELS: Record<string, string> = {
   monthly_cap: "limite mensal de consultas",
   monthly_budget: "orçamento mensal em US$",
   account_balance: "saldo mínimo da conta",
+  // checagens específicas do gate de autoridade
+  disposition: "disposição das regras",
+  min_overall_score: "nota geral abaixo do mínimo",
+  solver_balance: "saldo mínimo do resolvedor de captcha",
   // estados de provedor (ready/disabled/not_configured/decision_pending já acima)
   disabled_in_registry: "desligado no registro de provedores",
 };
