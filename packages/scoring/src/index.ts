@@ -340,7 +340,8 @@ function seoDimension(
     const trafficProvider = providers.find((p) => p.providerKey === "dataforseo");
     const explain = (p: ProviderOutcome | undefined, label: string): string | null => {
       if (!p) return null;
-      if (p.outcome === "decision_pending") return `${label} integration mode not yet decided`;
+      if (p.outcome === "decision_pending")
+        return `${label} integration mode not yet decided (standby)`;
       if (p.outcome === "not_configured") return `${label} not configured`;
       if (p.outcome === "skipped") return `${label} skipped: ${p.reason ?? "gate"}`;
       if (p.outcome === "failed") return `${label} failed: ${p.reason ?? "error"}`;

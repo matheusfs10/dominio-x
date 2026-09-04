@@ -52,11 +52,15 @@ export async function providerCallCounters(
     eq(providerRequests.providerKey, providerKey),
     isNull(providerRequests.errorCode),
   );
+  // The conditions are built with `gte` rather than interpolating the Date directly: a bare
+  // Date inside a `sql` template reaches the driver without a type and the bind fails.
+  const sinceDay = gte(providerRequests.startedAt, startOfDayUtc(now));
+  const sinceMonth = gte(providerRequests.startedAt, startOfMonthUtc(now));
   const [totals] = await db
     .select({
-      today: sql<number>`count(*) filter (where ${providerRequests.startedAt} >= ${startOfDayUtc(now)})::int`,
-      month: sql<number>`count(*) filter (where ${providerRequests.startedAt} >= ${startOfMonthUtc(now)})::int`,
-      costMonth: sql<number>`coalesce(sum(${providerRequests.estimatedCostUsd}) filter (where ${providerRequests.startedAt} >= ${startOfMonthUtc(now)}), 0)::float`,
+      today: sql<number>`count(*) filter (where ${sinceDay})::int`,
+      month: sql<number>`count(*) filter (where ${sinceMonth})::int`,
+      costMonth: sql<number>`coalesce(sum(${providerRequests.estimatedCostUsd}) filter (where ${sinceMonth}), 0)::float`,
     })
     .from(providerRequests)
     .where(billed);

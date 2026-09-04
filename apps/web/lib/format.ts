@@ -143,18 +143,13 @@ export const LABELS: Record<string, string> = {
   dns_resolution: "sem resolução de DNS",
   http_reachable: "site não respondeu",
   http_status: "status HTTP fora da lista",
-  candidate_gate: "reprovado no gate de candidatos",
   cooldown: "consultado recentemente (carência)",
   batch_cap: "limite de consultas do lote",
   daily_cap: "limite diário de consultas",
   monthly_cap: "limite mensal de consultas",
   monthly_budget: "orçamento mensal em US$",
   account_balance: "saldo mínimo da conta",
-  // estados de provedor
-  ready: "pronto",
-  disabled: "desligado",
-  not_configured: "não configurado",
-  decision_pending: "aguardando decisão",
+  // estados de provedor (ready/disabled/not_configured/decision_pending já acima)
   disabled_in_registry: "desligado no registro de provedores",
 };
 

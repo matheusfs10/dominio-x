@@ -38,7 +38,7 @@ describe("database (integration)", () => {
     expect(second.adminSkippedReason).toMatch(/already exist/);
 
     expect((await tdb.db.select().from(sources)).length).toBe(3);
-    expect((await tdb.db.select().from(providers)).length).toBe(5);
+    expect((await tdb.db.select().from(providers)).length).toBe(6);
     expect((await tdb.db.select().from(rulesets)).length).toBe(1);
     expect((await tdb.db.select().from(rules)).length).toBeGreaterThan(5);
     expect((await tdb.db.select().from(scoreModels))[0]?.status).toBe("active");
