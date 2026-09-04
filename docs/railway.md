@@ -67,6 +67,19 @@ Variables: `NODE_ENV=production`, `CRAWLER_CORE_API_URL=<api domain>`, `CRAWLER_
 (same value as the api; cross-project references are not possible), `CRAWLER_*` limits, `LOG_LEVEL`.
 **Never** `DATABASE_URL`, `REDIS_URL`, `SEMRUSH_*`, `SESSION_SECRET` or bucket credentials.
 
+## Secrets and the `variables` command
+
+`variables` never rotates `SESSION_SECRET` / `CRAWLER_MACHINE_TOKEN`: it reads the literals already
+set on `api` and writes the same values to `worker` and `scheduler-registro-br`. It must never write
+a `${{api.*}}` reference, because on the `api` service itself that is a self-reference which Railway
+resolves to an empty string — the service then fails config validation on its next boot while the
+previous deployment keeps serving, so the breakage only shows up at the following restart.
+If the values on `api` are missing, too short or a reference, the command now refuses to run rather
+than overwriting live secrets; repair them in the dashboard first, or pass `RAILWAY_SECRETS_FILE`.
+
+`CRAWLER_MACHINE_TOKEN` also lives on `crawler` in the other project (cross-project references are
+not possible), which makes it the only surviving copy if the core services ever lose it.
+
 ## Current interim settings
 
 - `CRAWLER_ENABLED=false` on api/worker until the `crawler` service exists (plan limit).

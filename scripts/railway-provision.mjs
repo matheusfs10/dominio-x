@@ -184,16 +184,25 @@ async function upsertVariables(scope, serviceId, variables) {
   );
 }
 
-async function existingVariableNames(scope, serviceId) {
+async function existingVariables(scope, serviceId) {
   try {
     const d = await gql(
       `query($projectId: String!, $environmentId: String!, $serviceId: String!) { variables(projectId: $projectId, environmentId: $environmentId, serviceId: $serviceId) }`,
       { projectId: scope.projectId, environmentId: scope.environmentId, serviceId },
     );
-    return new Set(Object.keys(d.variables));
+    return d.variables ?? {};
   } catch {
-    return new Set();
+    return {};
   }
+}
+
+/**
+ * A secret we may safely reuse: a real value, long enough for the config schema, and not a
+ * Railway reference. Writing `${{api.X}}` onto the api service itself is a self-reference that
+ * Railway resolves to an empty string, which silently breaks the service on its next boot.
+ */
+function usableSecret(value) {
+  return typeof value === "string" && value.length >= 32 && !value.startsWith("${{");
 }
 
 async function deploy(scope, serviceId) {
@@ -269,13 +278,23 @@ try {
       secretsPath && fs.existsSync(secretsPath)
         ? JSON.parse(fs.readFileSync(secretsPath, "utf8"))
         : null;
-    const apiVars = await existingVariableNames(state.core, state.core.services.api);
-    if (!secrets && apiVars.has("SESSION_SECRET") && apiVars.has("CRAWLER_MACHINE_TOKEN")) {
+    const apiVars = await existingVariables(state.core, state.core.services.api);
+    if (!secrets && usableSecret(apiVars.SESSION_SECRET) && usableSecret(apiVars.CRAWLER_MACHINE_TOKEN)) {
+      // Reuse the literal values. Never a `${{api.*}}` reference: on the api service itself that
+      // is a self-reference and resolves to "", which fails config validation on the next boot.
       secrets = {
-        SESSION_SECRET: "${{api.SESSION_SECRET}}",
-        CRAWLER_MACHINE_TOKEN: "${{api.CRAWLER_MACHINE_TOKEN}}",
+        SESSION_SECRET: apiVars.SESSION_SECRET,
+        CRAWLER_MACHINE_TOKEN: apiVars.CRAWLER_MACHINE_TOKEN,
       };
-      console.log("reusing existing secrets from the api service (references)");
+      console.log("reusing the secrets already set on the api service");
+    }
+    if (!secrets && (apiVars.SESSION_SECRET !== undefined || apiVars.CRAWLER_MACHINE_TOKEN !== undefined)) {
+      console.error(
+        "refusing to continue: the api service already has SESSION_SECRET/CRAWLER_MACHINE_TOKEN but they are\n" +
+          "unusable (empty, too short, or a reference). Repair them in the dashboard first, or pass\n" +
+          "RAILWAY_SECRETS_FILE with the intended values; overwriting them here would rotate live secrets.",
+      );
+      process.exit(3);
     }
     secrets ??= {
       SESSION_SECRET: randomBytes(32).toString("hex"),
