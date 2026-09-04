@@ -80,6 +80,22 @@ than overwriting live secrets; repair them in the dashboard first, or pass `RAIL
 `CRAWLER_MACHINE_TOKEN` also lives on `crawler` in the other project (cross-project references are
 not possible), which makes it the only surviving copy if the core services ever lose it.
 
+## Running a one-off command (seed, admin:create)
+
+Railway's public API has no exec endpoint, and `railway ssh` needs an SSH key registered on the
+account. The workaround is the `api` service's pre-deploy command, but two behaviours make the
+obvious attempts silently do nothing:
+
+- **pre-deploy is not shell-parsed.** `["a && b"]` passes `&&` and `b` as argv to `a`; only the
+  first program runs. Set the single command you want instead.
+- **`deploymentRedeploy` replays the original deployment's config snapshot**, so a settings change
+  made after that deployment is ignored. A *fresh* deployment is required — and `deploy` skips the
+  build when nothing matches `watchPatterns`, so clear the patterns for that one run.
+
+Sequence: set `preDeployCommand` to the one-off, set `watchPatterns` to `[]`, run
+`railway-provision.mjs deploy api`, read the deployment logs, then restore both fields. Migrations
+are idempotent, so skipping `migrate.js` for that single deployment is safe.
+
 ## Current interim settings
 
 - `CRAWLER_ENABLED=false` on api/worker until the `crawler` service exists (plan limit).
